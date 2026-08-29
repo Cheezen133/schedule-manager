@@ -1,0 +1,10 @@
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+sqlalchemy>=2.0.0
+python-jose[cryptography]>=3.3.0
+pydantic>=2.0.0
+pydantic[email]
+python-multipart>=0.0.9
+icalendar>=5.0.0
+slowapi>=0.1.9
+python-dotenv>=1.0.0

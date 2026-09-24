@@ -1,11 +1,12 @@
 """
 通知服务：创建、查询、标记已读
 """
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from ..models.notification import Notification
 from ..models.user import User
+from ..utils.datetime_utils import to_beijing_iso
 
 
 def create_notification(
@@ -116,7 +117,7 @@ def delete_notification(db: Session, notification_id: int, user_id: int) -> bool
 
 def delete_old_notifications(db: Session, user_id: int, days: int = 30) -> int:
     """删除 N 天前的已读通知"""
-    cutoff = datetime.now(timezone.utc).replace(day=datetime.now(timezone.utc).day - days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     count = (
         db.query(Notification)
         .filter(
@@ -143,5 +144,5 @@ def _notif_to_dict(n: Notification) -> dict:
         "related_schedule_id": n.related_schedule_id,
         "related_url": n.related_url,
         "is_read": n.is_read,
-        "created_at": n.created_at.isoformat() if n.created_at else None,
+        "created_at": to_beijing_iso(n.created_at),
     }

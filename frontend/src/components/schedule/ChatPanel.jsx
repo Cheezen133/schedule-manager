@@ -1,11 +1,32 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { getMessages, sendTextMessage, sendVoiceMessage } from '../../api/messages'
 import { useAuth } from '../../contexts/AuthContext'
+import { formatBeijingDate, formatBeijingTime } from '../../utils/dateTime'
+import { getAuthorizedFileBlob } from '../../api/files'
 
 function formatDate(dt) {
-  if (!dt) return ''
-  const d = new Date(dt)
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+  return formatBeijingDate(dt)
+}
+
+function ProtectedVoice({ url }) {
+  const [source, setSource] = useState('')
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    let objectUrl = ''
+    setSource(''); setFailed(false)
+    getAuthorizedFileBlob(url).then(blob => {
+      objectUrl = URL.createObjectURL(blob)
+      if (active) setSource(objectUrl)
+      else URL.revokeObjectURL(objectUrl)
+    }).catch(() => { if (active) setFailed(true) })
+    return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl) }
+  }, [url])
+
+  if (failed) return <span style={{ color: '#dc2626' }}>语音加载失败</span>
+  if (!source) return <span style={{ color: '#9ca3af' }}>语音加载中…</span>
+  return <audio controls src={source} style={{ height: 28, maxWidth: '100%' }} />
 }
 
 export default function ChatPanel({ scheduleId, customerName, customerPhone }) {
@@ -148,13 +169,13 @@ export default function ChatPanel({ scheduleId, customerName, customerPhone }) {
                        {isClientMsg ? `👤 ${customerName || '客户'}` : msg.sender_name}
                      </div>
                      {msg.msg_type === 'voice' ? (
-                       <audio controls src={msg.voice_url} style={{ height: 28, maxWidth: '100%' }} />
+                       <ProtectedVoice url={msg.voice_url} />
                      ) : (
                        <span>{msg.content}</span>
                      )}
                    </div>
                    <span style={{ fontSize: '0.65rem', color: '#9ca3af', marginTop: '2px' }}>
-                     {new Date(msg.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                     {formatBeijingTime(msg.created_at)}
                      {msg.voice_duration ? ` · ${msg.voice_duration}s` : ''}
                    </span>
                  </div>

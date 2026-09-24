@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import api from '../api/client'
 import { BackButton } from '../components/memo/MemoNav'
 import { longPressProps } from '../components/common/longPress'
+import useDebouncedValue from '../hooks/useDebouncedValue'
+import { dateOnlyToNaiveIso } from '../utils/dateTime'
 
 const blankPatient = () => ({ name: '', gender: '', birth_date: '', phone: '', allergies: '', medical_history: '', notes: '', group_ids: [] })
 const patientFormData = patient => ({ ...patient, birth_date: patient.birth_date?.slice(0, 10) || '', group_ids: (patient.groups || []).slice(0, 1).map(group => group.id) })
@@ -11,14 +13,15 @@ export default function PatientListPage() {
   const navigate = useNavigate()
   const [patients, setPatients] = useState([]), [groups, setGroups] = useState([])
   const [q, setQ] = useState(''), [selectedGroupId, setSelectedGroupId] = useState(null), [archived, setArchived] = useState(false)
+  const debouncedQ = useDebouncedValue(q)
   const [patientForm, setPatientForm] = useState(null), [groupDialog, setGroupDialog] = useState(null), [confirmDialog, setConfirmDialog] = useState(null), [menu, setMenu] = useState(null), [error, setError] = useState('')
 
   const load = useCallback(async () => {
     try {
-      const [patientRes, groupRes] = await Promise.all([api.get('/memos/patients', { params: { ...(q ? { q } : {}), archived } }), api.get('/memos/patients/groups')])
+      const [patientRes, groupRes] = await Promise.all([api.get('/memos/patients', { params: { ...(debouncedQ ? { q: debouncedQ } : {}), archived } }), api.get('/memos/patients/groups')])
       setPatients(patientRes.data?.data || []); setGroups(groupRes.data?.data || []); setError('')
     } catch { setError('无法加载病人档案。') }
-  }, [q, archived])
+  }, [debouncedQ, archived])
   useEffect(() => { load() }, [load])
   useEffect(() => {
     const close = () => setMenu(null), escape = event => { if (event.key === 'Escape') setMenu(null) }
@@ -33,7 +36,7 @@ export default function PatientListPage() {
   const savePatient = async event => {
     event.preventDefault()
     try {
-      const body = { ...patientForm, group_ids: (patientForm.group_ids || []).slice(0, 1), birth_date: patientForm.birth_date ? new Date(patientForm.birth_date).toISOString() : null }
+      const body = { ...patientForm, group_ids: (patientForm.group_ids || []).slice(0, 1), birth_date: dateOnlyToNaiveIso(patientForm.birth_date) }
       if (patientForm.id) await api.put(`/memos/patients/${patientForm.id}`, body); else await api.post('/memos/patients', body)
       setPatientForm(null); load()
     } catch { setError('保存病人信息失败。') }

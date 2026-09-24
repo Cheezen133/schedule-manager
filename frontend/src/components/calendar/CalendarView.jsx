@@ -2,6 +2,7 @@ import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import interactionPlugin from '@fullcalendar/interaction'
+import { toBeijingCalendarValue } from '../../utils/dateTime'
 
 /**
  * 根据状态和分类获取日历事件颜色
@@ -37,8 +38,8 @@ export default function CalendarView({ schedules, onEventClick, onDateClick }) {
     return {
       id: String(s.id),
       title: (s.is_busy_placeholder ? '◼ ' : '') + s.title,
-      start: s.start_time,
-      end: s.end_time,
+      start: toBeijingCalendarValue(s.start_time),
+      end: toBeijingCalendarValue(s.end_time),
       allDay: s.is_all_day,
       backgroundColor: colors.bg,
       borderColor: colors.border,
@@ -50,6 +51,7 @@ export default function CalendarView({ schedules, onEventClick, onDateClick }) {
       extendedProps: {
         status: s.status,
         isImportant: s.is_important,
+        isBusyPlaceholder: Boolean(s.is_busy_placeholder),
       },
     }
   })
@@ -71,6 +73,7 @@ export default function CalendarView({ schedules, onEventClick, onDateClick }) {
       }}
       events={events}
       eventClick={(info) => {
+        if (info.event.extendedProps.isBusyPlaceholder) return
         if (onEventClick) onEventClick(info.event.id)
       }}
       dateClick={(info) => {

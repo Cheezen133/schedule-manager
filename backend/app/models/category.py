@@ -17,7 +17,7 @@ class Category(Base):
     icon = Column(String(10), default="📋", comment="分类图标")
     is_active = Column(Boolean, default=True, comment="是否启用")
     sort_order = Column(Integer, default=0, comment="排序顺序")
-    created_by = Column(Integer, ForeignKey("users.id"), nullable=False, comment="创建者ID")
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False, comment="分类拥有者ID")
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), comment="创建时间")
     updated_at = Column(
         DateTime,

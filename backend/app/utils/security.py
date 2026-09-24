@@ -18,6 +18,30 @@ def create_access_token(data: dict) -> str:
     return encoded_jwt
 
 
+def create_password_recovery_token(user_id: int) -> str:
+    """创建仅供密码重置使用的 10 分钟临时令牌。"""
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": f"password-recovery:{user_id}",
+        "token_type": "password_recovery",
+        "iat": now,
+        "exp": now + timedelta(minutes=10),
+    }
+    return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+
+
+def decode_password_recovery_token(token: str) -> int:
+    """验证密码找回令牌并返回用户 ID；普通登录令牌不能通过。"""
+    payload = decode_access_token(token)
+    subject = payload.get("sub", "")
+    if payload.get("token_type") != "password_recovery" or not str(subject).startswith("password-recovery:"):
+        raise JWTError("无效的密码找回凭证")
+    try:
+        return int(str(subject).split(":", 1)[1])
+    except (TypeError, ValueError, IndexError) as error:
+        raise JWTError("无效的密码找回凭证") from error
+
+
 def decode_access_token(token: str) -> dict:
     """
     解码 JWT 令牌，返回 payload

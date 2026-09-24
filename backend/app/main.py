@@ -2,9 +2,11 @@
 日程管理系统 — FastAPI 应用入口
 """
 import os
+from pathlib import Path
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from .config import APP_NAME, APP_VERSION, CORS_ORIGINS
 from .database import init_db
@@ -60,16 +62,22 @@ async def health_check():
 
 
 # 生产环境：服务前端静态文件
-frontend_dist = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist")
-if os.path.exists(frontend_dist):
+frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+if frontend_dist.exists():
     @app.get("/{full_path:path}")
     async def serve_frontend(full_path: str):
         """服务前端 SPA（仅生产环境）"""
-        import os as _os
-        file_path = _os.path.join(frontend_dist, full_path)
-        if _os.path.exists(file_path) and not _os.path.isdir(file_path):
-            from fastapi.responses import FileResponse
-            return FileResponse(file_path)
+        if full_path == "api" or full_path.startswith("api/"):
+            return JSONResponse(status_code=404, content={"detail": "API endpoint not found"})
 
-        from fastapi.responses import FileResponse
-        return FileResponse(_os.path.join(frontend_dist, "index.html"))
+        file_path = (frontend_dist / full_path).resolve()
+        if frontend_dist == file_path or frontend_dist in file_path.parents:
+            if file_path.exists() and file_path.is_file():
+                return FileResponse(file_path)
+
+        index_file = frontend_dist / "index.html"
+        if index_file.exists():
+            # 非 API 地址交给前端路由处理。
+            return FileResponse(index_file)
+
+        return JSONResponse(status_code=404, content={"detail": "Frontend build not found"})

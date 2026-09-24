@@ -41,7 +41,7 @@ class Schedule(Base):
     reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True, comment="审核者ID")
     reviewed_at = Column(DateTime, nullable=True, comment="审核时间")
     review_comment = Column(Text, nullable=True, comment="审核备注")
-    # 由日程码管理者或管理员代为修改后，必须由日程拥有者确认
+    # 由获批日程管理者代为修改后，必须由日程拥有者确认
     requires_owner_review = Column(Boolean, nullable=False, default=False, comment="是否等待日程拥有者审核")
 
     # 外部联系人

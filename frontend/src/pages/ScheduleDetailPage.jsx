@@ -8,6 +8,7 @@ import { getScheduleDetail, deleteSchedule, approveSchedule, rejectSchedule } fr
 import AttachmentsPanel from '../components/schedule/AttachmentsPanel'
 import { useAuth } from '../contexts/AuthContext'
 import { ConfirmDialog } from '../components/common/Ui'
+import { formatBeijingLocale } from '../utils/dateTime'
 
 export default function ScheduleDetailPage() {
   const { id } = useParams()
@@ -68,8 +69,9 @@ export default function ScheduleDetailPage() {
     )
   }
 
-  // 后端已校验权限（_can_modify_schedule），能打开详情即可操作
-  const canEdit = user && schedule && !schedule.is_busy_placeholder
+  const isScheduleOwner = user && schedule && Number(user.id) === Number(schedule.created_by)
+  // reader 不能编辑自己的日程；作为有效管理者查看他人详情时仍可代为编辑。
+  const canEdit = user && schedule && !schedule.is_busy_placeholder && (!isScheduleOwner || user.role !== 'reader')
   const canDelete = user && schedule && !schedule.is_busy_placeholder
 
   return (
@@ -128,7 +130,7 @@ export default function ScheduleDetailPage() {
         <div style={{ marginTop: '1.5rem', padding: '1rem', background: '#f9fafb', borderRadius: '8px' }}>
           <p style={{ fontSize: '0.9rem', color: '#6b7280' }}>
             审核人: {schedule.reviewer_name}
-            {schedule.reviewed_at && ` | 审核时间: ${new Date(schedule.reviewed_at).toLocaleString('zh-CN')}`}
+            {schedule.reviewed_at && ` | 审核时间: ${formatBeijingLocale(schedule.reviewed_at)}（北京时间）`}
           </p>
           {schedule.review_comment && (
             <p style={{ fontSize: '0.9rem', color: '#6b7280', marginTop: '0.25rem' }}>
@@ -209,7 +211,7 @@ function CopyScheduleInfoButton({ schedule }) {
 
   const formatDt = (dt) => {
     if (!dt) return ''
-    return new Date(dt).toLocaleString('zh-CN')
+    return `${formatBeijingLocale(dt)}（北京时间）`
   }
 
   const handleCopy = async () => {
@@ -225,7 +227,9 @@ function CopyScheduleInfoButton({ schedule }) {
       schedule.external_contact_name ? `联系人: ${schedule.external_contact_name}` : '',
       schedule.external_contact_phone ? `电话: ${schedule.external_contact_phone}` : '',
       schedule.category_name ? `分类: ${schedule.category_name}` : '',
-      schedule.visibility === 'admin_only' ? '【仅管理员可见】' : '',
+      schedule.visibility === 'private' ? '观看权限: 仅创建者和日程所有者' : '',
+      schedule.visibility === 'managers' ? '观看权限: 所有有效管理者' : '',
+      schedule.visibility === 'selected' ? '观看权限: 指定管理者' : '',
     ].filter(Boolean).join('\n')
 
     try {

@@ -17,7 +17,7 @@ export default function ContactsPage() {
       const result = await getContacts()
       setContacts(result.data || [])
     } catch {
-      setError('获取联系人列表失败')
+      setError('获取电话簿失败')
     } finally {
       setLoading(false)
     }
@@ -27,16 +27,16 @@ export default function ContactsPage() {
 
   return (
     <div className="contacts-page">
-      <h2>📞 外部联系人</h2>
+      <h2>📞 电话簿</h2>
       <p style={{ color: '#6b7280', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-        来自已确认日程中的外部联系人，点击可直接复制电话号码
+        汇总已确认日程中的电话联系人，点击可直接复制电话号码
       </p>
 
       {error && <div className="error-message">{error}</div>}
 
       {contacts.length === 0 ? (
         <p style={{ color: '#9ca3af', textAlign: 'center', padding: '3rem' }}>
-          暂无外部联系人
+          电话簿中暂无联系人
         </p>
       ) : (
         contacts.map((contact, idx) => (

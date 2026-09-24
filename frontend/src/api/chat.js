@@ -1,4 +1,5 @@
 import apiClient from './client'
+import { getAuthorizedFileBlob, downloadAuthorizedFile } from './files'
 
 export async function getConversations() {
   const res = await apiClient.get('/chat/conversations')
@@ -50,8 +51,15 @@ export async function recallMessage(msgId) {
   return res.data
 }
 
-export async function getChatContacts(friendsOnly = false) {
-  const res = await apiClient.get('/chat/contacts', { params: { friends_only: friendsOnly } })
+export async function getChatContacts(friendsOnly = false, query = '') {
+  const params = { friends_only: friendsOnly }
+  if (query.trim()) params.q = query.trim()
+  const res = await apiClient.get('/chat/contacts', { params })
+  return res.data
+}
+
+export async function deleteFriend(userId) {
+  const res = await apiClient.delete(`/chat/friends/${userId}`)
   return res.data
 }
 
@@ -66,20 +74,11 @@ export function getDownloadUrl(filename) {
 // 图片、视频和下载接口需要 JWT。原生 img/video/window.open 不会附带 Authorization，
 // 因此统一通过 Axios 获取 Blob，再交给浏览器展示或保存。
 export async function getAuthorizedMediaBlob(filename) {
-  const res = await apiClient.get(`/chat/messages/media/${encodeURIComponent(filename)}`, { responseType: 'blob' })
-  return res.data
+  return getAuthorizedFileBlob(getMediaUrl(filename))
 }
 
 export async function downloadAuthorizedChatFile(filename, suggestedName) {
-  const res = await apiClient.get(`/chat/messages/download/${encodeURIComponent(filename)}`, { responseType: 'blob' })
-  const url = URL.createObjectURL(res.data)
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = suggestedName || filename
-  document.body.appendChild(anchor)
-  anchor.click()
-  anchor.remove()
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  return downloadAuthorizedFile(getDownloadUrl(filename), suggestedName || filename)
 }
 
 export async function addFavorite(msgId) {
@@ -149,8 +148,18 @@ export async function deleteSharedFile(fileId) {
   return res.data
 }
 
+export async function updateSharedFile(fileId, data) {
+  const res = await apiClient.put(`/chat/files/${fileId}`, data)
+  return res.data
+}
+
 export async function getGroupMembers(convId) {
   const res = await apiClient.get(`/chat/conversations/${convId}/members`)
+  return res.data
+}
+
+export async function addGroupMembers(convId, userIds) {
+  const res = await apiClient.post(`/chat/conversations/${convId}/members`, { user_ids: userIds })
   return res.data
 }
 
@@ -189,6 +198,11 @@ export async function deleteGroupAnnouncement(announcementId) {
   return res.data
 }
 
+export async function updateGroupAnnouncement(announcementId, data) {
+  const res = await apiClient.put(`/chat/announcements/${announcementId}`, data)
+  return res.data
+}
+
 export async function getGroupTodos(convId) {
   const res = await apiClient.get(`/chat/conversations/${convId}/todos`)
   return res.data
@@ -201,6 +215,11 @@ export async function createGroupTodo(convId, data) {
 
 export async function toggleGroupTodo(todoId) {
   const res = await apiClient.put(`/chat/todos/${todoId}/toggle`)
+  return res.data
+}
+
+export async function updateGroupTodo(todoId, data) {
+  const res = await apiClient.put(`/chat/todos/${todoId}`, data)
   return res.data
 }
 

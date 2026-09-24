@@ -1,7 +1,5 @@
-"""
-分类管理路由（管理员专属）
-"""
-from fastapi import APIRouter, Depends, HTTPException, status
+"""个人日程分类路由。"""
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -14,20 +12,33 @@ from ..services.category_service import (
     delete_category,
     _category_to_response,
 )
-from ..dependencies import get_current_user, require_role
+from ..dependencies import get_current_user
 from ..models.user import User
+from ..services.schedule_management_service import is_effective_manager
 
 router = APIRouter(prefix="/api/v1", tags=["分类管理"])
+
+
+def require_category_owner_access(db: Session, current_user: User, owner_id: int) -> User:
+    owner = db.query(User).filter(User.id == owner_id, User.is_active == True).first()
+    if not owner:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
+    if not is_effective_manager(db, current_user.id, owner_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="没有该用户的有效日程管理权限")
+    return owner
 
 
 @router.get("/categories", summary="获取分类列表")
 async def list_categories(
     include_inactive: bool = False,
+    owner_id: int | None = Query(None, description="日程拥有者ID，默认当前用户"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """所有人可查看分类列表"""
-    cats = get_categories(db, include_inactive)
+    """本人或有效日程管理者查看个人分类。"""
+    target_id = owner_id or current_user.id
+    require_category_owner_access(db, current_user, target_id)
+    cats = get_categories(db, target_id, include_inactive)
     return {
         "code": 0,
         "message": "ok",
@@ -35,14 +46,16 @@ async def list_categories(
     }
 
 
-@router.post("/categories", summary="创建分类（管理员）")
+@router.post("/categories", summary="创建个人分类")
 async def create_new_category(
     data: CategoryCreate,
+    owner_id: int | None = Query(None, description="分类拥有者ID，默认当前用户"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role("admin")),
+    current_user: User = Depends(get_current_user),
 ):
-    """管理员创建新分类"""
-    cat = create_category(db, data, current_user.id)
+    target_id = owner_id or current_user.id
+    require_category_owner_access(db, current_user, target_id)
+    cat = create_category(db, data, target_id)
     return {
         "code": 0,
         "message": "分类创建成功",
@@ -50,17 +63,17 @@ async def create_new_category(
     }
 
 
-@router.put("/categories/{cat_id}", summary="编辑分类（管理员）")
+@router.put("/categories/{cat_id}", summary="编辑个人分类")
 async def edit_category(
     cat_id: int,
     data: CategoryUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role("admin")),
+    current_user: User = Depends(get_current_user),
 ):
-    """管理员编辑分类"""
     cat = get_category_by_id(db, cat_id)
     if not cat:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="分类不存在")
+    require_category_owner_access(db, current_user, cat.created_by)
     cat = update_category(db, cat, data)
     return {
         "code": 0,
@@ -69,18 +82,15 @@ async def edit_category(
     }
 
 
-@router.delete("/categories/{cat_id}", summary="删除分类（管理员）")
+@router.delete("/categories/{cat_id}", summary="删除个人分类")
 async def remove_category(
     cat_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role("admin")),
+    current_user: User = Depends(get_current_user),
 ):
-    """管理员删除分类（仅当无日程关联时）"""
     cat = get_category_by_id(db, cat_id)
     if not cat:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="分类不存在")
-    try:
-        delete_category(db, cat)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    return {"code": 0, "message": "分类已删除", "data": None}
+    require_category_owner_access(db, current_user, cat.created_by)
+    delete_category(db, cat)
+    return {"code": 0, "message": "分类已删除，原有日程已转为未分类", "data": None}

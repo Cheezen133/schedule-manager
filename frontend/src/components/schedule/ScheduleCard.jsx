@@ -1,19 +1,11 @@
 import { Link } from 'react-router-dom'
 import ScheduleStatusBadge from './ScheduleStatusBadge'
 import ContactCopyButton from './ContactCopyButton'
+import { formatBeijingDateTime } from '../../utils/dateTime'
 
 /**
  * 格式化日期时间显示（正确处理 UTC → 本地时间转换）
  */
-function formatDateTime(dt) {
-  if (!dt) return ''
-  const d = new Date(dt)
-  // 如果解析失败，尝试在末尾追加 Z 按 UTC 解析
-  if (isNaN(d.getTime())) return dt.substring(0, 16).replace('T', ' ')
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-
 export default function ScheduleCard({ schedule, showReviewActions, onApprove, onReject }) {
   return (
     <div className={`schedule-card ${schedule.is_important ? 'important' : ''} ${schedule.visibility === 'admin_only' ? 'admin-only' : ''}`}>
@@ -34,8 +26,8 @@ export default function ScheduleCard({ schedule, showReviewActions, onApprove, o
       </h3>
 
       <div className="schedule-meta">
-        <span>📅 {formatDateTime(schedule.start_time)}</span>
-        <span>→ {formatDateTime(schedule.end_time)}</span>
+        <span>📅 {formatBeijingDateTime(schedule.start_time)}</span>
+        <span>→ {formatBeijingDateTime(schedule.end_time)}（北京时间）</span>
         {schedule.is_all_day && <span>全天</span>}
         {schedule.creator_name && <span>👤 {schedule.creator_name}</span>}
       </div>

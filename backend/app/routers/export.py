@@ -8,9 +8,11 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..services.ical_service import generate_ical
-from ..services.schedule_service import get_schedules
+from ..models.schedule import Schedule
+from ..services.schedule_management_service import can_view_schedule, is_effective_manager
 from ..dependencies import get_current_user
 from ..models.user import User
+from ..utils.datetime_utils import BEIJING, parse_client_datetime
 
 router = APIRouter(prefix="/api/v1", tags=["导出"])
 
@@ -19,6 +21,7 @@ router = APIRouter(prefix="/api/v1", tags=["导出"])
 async def export_ical(
     start_date: str | None = Query(None, description="开始日期 (YYYY-MM-DD)"),
     end_date: str | None = Query(None, description="结束日期 (YYYY-MM-DD)"),
+    owner_id: int | None = Query(None, description="日程拥有者ID；默认当前用户"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -30,17 +33,34 @@ async def export_ical(
     end_dt = None
     if start_date:
         try:
-            start_dt = datetime.fromisoformat(start_date)
+            start_dt = parse_client_datetime(start_date)
         except ValueError:
             raise HTTPException(status_code=400, detail="start_date 格式错误，请使用 YYYY-MM-DD 格式")
     if end_date:
         try:
-            end_dt = datetime.fromisoformat(end_date)
+            end_dt = parse_client_datetime(end_date, end_of_day=True)
         except ValueError:
             raise HTTPException(status_code=400, detail="end_date 格式错误，请使用 YYYY-MM-DD 格式")
 
-    # 只导出已确认的日程
-    schedules = get_schedules(db, start_dt, end_dt, status="confirmed", user_role=current_user.role, user_id=current_user.id)
+    target_owner_id = owner_id or current_user.id
+    if target_owner_id != current_user.id and not is_effective_manager(
+        db, current_user.id, target_owner_id
+    ):
+        raise HTTPException(status_code=403, detail="没有该好友日程的有效管理权限，无法导出")
+
+    # 导出范围与当前日历对象一致，并继续逐条应用事件级观看权限。
+    query = db.query(Schedule).filter(
+        Schedule.status == "confirmed",
+        Schedule.created_by == target_owner_id,
+    )
+    if start_dt:
+        query = query.filter(Schedule.end_time >= start_dt)
+    if end_dt:
+        query = query.filter(Schedule.start_time <= end_dt)
+    schedules = [
+        schedule for schedule in query.order_by(Schedule.start_time.asc()).all()
+        if can_view_schedule(db, schedule, current_user.id)
+    ]
 
     if not schedules:
         return Response(
@@ -57,6 +77,6 @@ async def export_ical(
         content=ical_data,
         media_type="text/calendar; charset=utf-8",
         headers={
-            "Content-Disposition": f"attachment; filename=schedules_{datetime.now().strftime('%Y%m%d')}.ics"
+            "Content-Disposition": f"attachment; filename=schedules_{datetime.now(BEIJING).strftime('%Y%m%d')}.ics"
         },
     )

@@ -2,7 +2,7 @@
 共享文件模型 — 对话级别的文件共享
 """
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from ..database import Base
 
@@ -19,6 +19,7 @@ class SharedFile(Base):
     msg_type = Column(String(10), nullable=False, default="file", comment="image / video / file")
     tag = Column(String(50), nullable=True, comment="标签")
     note = Column(String(500), nullable=True, comment="备注")
+    content = Column(Text, nullable=True, comment="共享文字消息正文")
     source_msg_id = Column(Integer, ForeignKey("chat_messages.id", ondelete="SET NULL"), nullable=True, comment="来源于聊天消息ID")
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 

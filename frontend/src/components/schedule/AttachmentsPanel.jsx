@@ -1,7 +1,33 @@
 import { useState, useEffect, useRef } from 'react'
 import { getAttachments, uploadAttachment, deleteAttachment, getAttachmentDownloadUrl } from '../../api/attachments'
+import { downloadAuthorizedFile, getAuthorizedFileBlob, openAuthorizedFile } from '../../api/files'
+import { useAuth } from '../../contexts/AuthContext'
+
+function ProtectedAttachmentImage({ attachmentId, alt, onOpen }) {
+  const [src, setSrc] = useState('')
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    let objectUrl = ''
+    setSrc(''); setFailed(false)
+    getAuthorizedFileBlob(getAttachmentDownloadUrl(attachmentId))
+      .then(blob => {
+        objectUrl = URL.createObjectURL(blob)
+        if (active) setSrc(objectUrl)
+        else URL.revokeObjectURL(objectUrl)
+      })
+      .catch(() => { if (active) setFailed(true) })
+    return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl) }
+  }, [attachmentId])
+
+  if (failed) return <span style={{ fontSize: '1.5rem' }} title="预览加载失败">🖼️</span>
+  if (!src) return <span style={{ width: 48, textAlign: 'center', color: '#9ca3af' }}>···</span>
+  return <button type="button" onClick={onOpen} style={{ padding: 0, border: 0, background: 'none', cursor: 'pointer' }}><img src={src} alt={alt} style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, border: '1px solid #e5e7eb' }} /></button>
+}
 
 export default function AttachmentsPanel({ scheduleId, customerPhone }) {
+  const { user, isAdmin } = useAuth()
   const [attachments, setAttachments] = useState([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
@@ -39,6 +65,16 @@ export default function AttachmentsPanel({ scheduleId, customerPhone }) {
     if (!confirm('删除此附件？')) return
     try { await deleteAttachment(attId); loadAttachments() }
     catch (err) { alert(err.userMessage ||'删除失败') }
+  }
+
+  const handleOpen = async (att) => {
+    try { await openAuthorizedFile(getAttachmentDownloadUrl(att.id)) }
+    catch (err) { alert(err.userMessage || '打开附件失败') }
+  }
+
+  const handleDownload = async (att) => {
+    try { await downloadAuthorizedFile(getAttachmentDownloadUrl(att.id), att.filename) }
+    catch (err) { alert(err.userMessage || '下载附件失败') }
   }
 
   const formatSize = (bytes) => {
@@ -85,17 +121,14 @@ export default function AttachmentsPanel({ scheduleId, customerPhone }) {
            <div key={att.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem',
                padding: '0.6rem 0.8rem', background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '0.85rem' }}>
              {isImage(att.content_type) ? (
-               <a href={getAttachmentDownloadUrl(att.id)} target="_blank" rel="noreferrer">
-                 <img src={getAttachmentDownloadUrl(att.id)} alt={att.filename}
-                   style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, border: '1px solid #e5e7eb' }} />
-               </a>
+               <ProtectedAttachmentImage attachmentId={att.id} alt={att.filename} onOpen={() => handleOpen(att)} />
              ) : (
                <span style={{ fontSize: '1.5rem' }}>📄</span>
              )}
              <div style={{ flex: 1, minWidth: 0 }}>
-               <a href={getAttachmentDownloadUrl(att.id)} target="_blank" rel="noreferrer" style={{ color: '#4f46e5', fontWeight: 500 }}>
+               <button type="button" onClick={() => handleOpen(att)} style={{ padding: 0, border: 'none', background: 'none', cursor: 'pointer', color: '#4f46e5', fontWeight: 500 }}>
                  {att.filename}
-               </a>
+               </button>
                {att.description && <span style={{ color: '#6b7280', marginLeft: '0.5rem', fontSize: '0.8rem' }}>- {att.description}</span>}
                <div style={{ fontSize: '0.7rem', color: '#9ca3af' }}>
                  {formatSize(att.file_size)} · {att.uploader_name}
@@ -104,8 +137,11 @@ export default function AttachmentsPanel({ scheduleId, customerPhone }) {
                  )}
                </div>
              </div>
-             <button onClick={() => handleDelete(att.id)}
+             <button onClick={() => handleDownload(att)} title="下载附件"
+               style={{ background: 'none', border: 'none', color: '#4f46e5', cursor: 'pointer', fontSize: '0.85rem' }}>⬇</button>
+             {(isAdmin || att.uploaded_by === user?.id) && <button onClick={() => handleDelete(att.id)}
                style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '0.85rem' }}>🗑</button>
+             }
            </div>
          ))}
        </div>

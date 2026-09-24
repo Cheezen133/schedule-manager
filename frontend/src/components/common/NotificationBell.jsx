@@ -1,21 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getUnreadCount, getNotifications, markAllNotificationsRead, markNotificationRead, deleteNotification } from '../../api/notifications'
+import { getNotifications, markAllNotificationsRead, markNotificationRead, deleteNotification } from '../../api/notifications'
+import { formatRelativeTime } from '../../utils/dateTime'
 
-export default function NotificationBell() {
-  const [unreadCount, setUnreadCount] = useState(0)
+export default function NotificationBell({ unreadCount = 0, setUnreadCount }) {
   const [notifications, setNotifications] = useState([])
   const [showDropdown, setShowDropdown] = useState(false)
   const [loading, setLoading] = useState(false)
   const dropdownRef = useRef(null)
   const navigate = useNavigate()
-
-  const fetchUnreadCount = async () => {
-    try {
-      const res = await getUnreadCount()
-      setUnreadCount(res.data?.count || 0)
-    } catch { /* ignore */ }
-  }
 
   const fetchNotifications = async () => {
     try {
@@ -25,13 +18,6 @@ export default function NotificationBell() {
     } catch { /* ignore */ }
     finally { setLoading(false) }
   }
-
-  useEffect(() => {
-    fetchUnreadCount()
-    // 保持右上角未读提示及时同步，包括日程管理申请与审批结果。
-    const timer = setInterval(fetchUnreadCount, 10000)
-    return () => clearInterval(timer)
-  }, [])
 
   // 点击外部关闭下拉
   useEffect(() => {
@@ -104,17 +90,6 @@ export default function NotificationBell() {
     return map[type] || '🔔'
   }
 
-  const timeAgo = (dateStr) => {
-    const diff = Date.now() - new Date(dateStr).getTime()
-    const mins = Math.floor(diff / 60000)
-    if (mins < 1) return '刚刚'
-    if (mins < 60) return `${mins}分钟前`
-    const hours = Math.floor(mins / 60)
-    if (hours < 24) return `${hours}小时前`
-    const days = Math.floor(hours / 24)
-    return `${days}天前`
-  }
-
   return (
     <div className="notification-bell-wrapper" ref={dropdownRef}>
       <button className="notification-bell" onClick={handleToggle} title="通知">
@@ -150,7 +125,7 @@ export default function NotificationBell() {
                   <div className="notification-content">
                     <div className="notification-title">{n.title}</div>
                     <div className="notification-text">{n.content}</div>
-                    <div className="notification-time">{timeAgo(n.created_at)}</div>
+                    <div className="notification-time">{formatRelativeTime(n.created_at)}</div>
                   </div>
                   <button className="notif-bell-delete" onClick={(e) => handleDeleteNotif(e, n)} title="删除">✕</button>
                 </div>

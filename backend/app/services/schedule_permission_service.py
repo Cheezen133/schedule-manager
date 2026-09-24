@@ -7,7 +7,7 @@ from .schedule_management_service import can_view_schedule
 
 
 def can_access_schedule(db: Session, schedule: Schedule, current_user: User) -> bool:
-    """管理员、日程拥有者及拥有日程码授权的用户可访问关联资源。"""
+    """仅日程拥有者及当前拥有事件级访问权的有效管理者可访问关联资源。"""
     return can_view_schedule(db, schedule, current_user.id)
 
 

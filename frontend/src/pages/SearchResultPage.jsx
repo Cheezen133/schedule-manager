@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate, Link } from 'react-router-dom'
 import { searchSchedules } from '../api/search'
 import Loading from '../components/common/Loading'
+import { formatBeijingDateTime } from '../utils/dateTime'
 const STATUS_MAP = { pending: '待审核', confirmed: '已确认', rejected: '已驳回', cancelled: '已取消' }
 
 export default function SearchResultPage() {
@@ -39,12 +40,6 @@ export default function SearchResultPage() {
     doSearch(nextPage)
   }
 
-  const formatTime = (s) => {
-    if (!s) return ''
-    const d = new Date(s)
-    return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
-  }
-
   return (
     <div className="page-content">
       <h2>🔍 搜索结果："{keyword}"</h2>
@@ -64,7 +59,7 @@ export default function SearchResultPage() {
                     <span className={`status-badge status-${s.status}`}>{STATUS_MAP[s.status] || s.status}</span>
                   </h3>
                   <div className="schedule-meta">
-                    <span>📅 {formatTime(s.start_time)} — {formatTime(s.end_time)}</span>
+                    <span>📅 {formatBeijingDateTime(s.start_time, { includeYear: false })} — {formatBeijingDateTime(s.end_time, { includeYear: false })}（北京时间）</span>
                     {s.category_name && (
                       <span style={{ color: s.category_color }}>📂 {s.category_name}</span>
                     )}

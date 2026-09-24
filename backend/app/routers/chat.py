@@ -19,7 +19,9 @@ from ..models.chat_message import ChatMessage
 from ..models.shared_file import SharedFile
 from ..models.memo import GroupAnnouncement, GroupTodo
 from ..models.favorite import FavoriteMessage
+from ..models.notification import Notification
 from ..services.notification_service import create_notification
+from ..utils.datetime_utils import to_beijing_iso
 
 router = APIRouter(prefix="/api/v1/chat", tags=["聊天"])
 
@@ -57,6 +59,15 @@ class GroupRenameRequest(BaseModel):
 class GroupMemberRoleRequest(BaseModel):
     role: str = Field(..., pattern="^(admin|member)$")
 
+
+class GroupMembersAddRequest(BaseModel):
+    user_ids: list[int] = Field(..., min_length=1, max_length=99)
+
+
+class SharedFileUpdateRequest(BaseModel):
+    tag: str | None = Field(None, max_length=50)
+    note: str | None = Field(None, max_length=500)
+
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "uploads", "chat")
 MAX_SIZE = 50 * 1024 * 1024  # 50MB
 
@@ -86,7 +97,7 @@ def _is_conversation_member(db: Session, conv: Conversation, user_id: int) -> bo
             ConversationMember.conversation_id == conv.id,
             ConversationMember.user_id == user_id,
         ).first() is not None
-    return user_id in (conv.user1_id, conv.user2_id)
+    return conv.is_accepted == 1 and user_id in (conv.user1_id, conv.user2_id)
 
 
 def _group_member_ids(db: Session, conv_id: int) -> list[int]:
@@ -106,14 +117,14 @@ def _require_group_manager(db: Session, conv_id: int, current_user: User) -> tup
     conv = _require_group_member(db, conv_id, current_user)
     membership = _group_membership(db, conv.id, current_user.id)
     if not membership or membership.role not in ("owner", "admin"):
-        raise HTTPException(status_code=403, detail="Only the group owner or an administrator can perform this action")
+        raise HTTPException(status_code=403, detail="仅群主或群管理员可以执行此操作")
     return conv, membership
 
 
 def _require_group_owner(db: Session, conv_id: int, current_user: User) -> tuple[Conversation, ConversationMember]:
     conv, membership = _require_group_manager(db, conv_id, current_user)
     if membership.role != "owner":
-        raise HTTPException(status_code=403, detail="Only the group owner can perform this action")
+        raise HTTPException(status_code=403, detail="仅群主可以执行此操作")
     return conv, membership
 
 
@@ -160,10 +171,10 @@ def _msg_to_dict(m: ChatMessage) -> dict:
             "file_name": None,
             "file_size": None,
             "is_recalled": True,
-            "recalled_at": m.recalled_at.isoformat() if m.recalled_at else None,
+            "recalled_at": to_beijing_iso(m.recalled_at),
             "recalled_by_id": m.recalled_by_id,
             "recalled_by_name": recalled_by.nickname if recalled_by else None,
-            "created_at": m.created_at.isoformat() if m.created_at else None,
+            "created_at": to_beijing_iso(m.created_at),
         }
     return {
         "id": m.id,
@@ -179,7 +190,25 @@ def _msg_to_dict(m: ChatMessage) -> dict:
         "recalled_at": None,
         "recalled_by_id": None,
         "recalled_by_name": None,
-        "created_at": m.created_at.isoformat() if m.created_at else None,
+        "created_at": to_beijing_iso(m.created_at),
+    }
+
+
+def _shared_file_to_dict(item: SharedFile) -> dict:
+    is_text = item.msg_type == "text"
+    return {
+        "id": item.id,
+        "file_url": None if is_text else item.file_url,
+        "file_name": item.file_name,
+        "file_size": item.file_size,
+        "msg_type": item.msg_type,
+        "tag": item.tag,
+        "note": item.note,
+        "content": item.content or (item.source_msg.content if is_text and item.source_msg else None),
+        "source_message_id": item.source_msg_id,
+        "conversation_id": item.conversation_id,
+        "uploader_name": item.uploader.nickname if item.uploader else None,
+        "created_at": to_beijing_iso(item.created_at),
     }
 
 
@@ -265,7 +294,7 @@ async def list_conversations(
             "id": c.id,
             "partner": partner,
             "last_message": _msg_to_dict(last_msg) if last_msg else None,
-            "updated_at": c.updated_at.isoformat() if c.updated_at else None,
+            "updated_at": to_beijing_iso(c.updated_at),
             "has_unread": has_unread,
             "my_last_read": my_last_read,
         })
@@ -288,42 +317,58 @@ async def create_conversation(
     if not target or not target.is_active:
         raise HTTPException(status_code=404, detail="用户不存在")
 
-    # 检查是否已有已接受的对话
+    from ..models.friend_request import FriendRequest
+
+    # 删除好友后保留私聊历史，重新添加时复用原会话。
     u1 = min(current_user.id, user_id)
     u2 = max(current_user.id, user_id)
     existing_conv = db.query(Conversation).filter(
-        Conversation.user1_id == u1, Conversation.user2_id == u2, Conversation.is_accepted == 1
-    ).first()
-    if existing_conv:
-        return {"code": 0, "message": "已是好友", "data": {"id": existing_conv.id, "partner": _partner_info(existing_conv, current_user.id)}}
+        Conversation.user1_id == u1,
+        Conversation.user2_id == u2,
+        Conversation.is_group == False,
+    ).order_by(Conversation.id.asc()).first()
+    relations = db.query(FriendRequest).filter(or_(
+        (FriendRequest.sender_id == current_user.id) & (FriendRequest.receiver_id == user_id),
+        (FriendRequest.sender_id == user_id) & (FriendRequest.receiver_id == current_user.id),
+    )).order_by(FriendRequest.id.asc()).all()
+    accepted_relation = next((item for item in relations if item.status == "accepted"), None)
+    if accepted_relation:
+        conv = existing_conv or Conversation(user1_id=u1, user2_id=u2, is_accepted=1, is_group=False)
+        conv.is_accepted = 1
+        if existing_conv is None:
+            db.add(conv)
+        db.commit()
+        db.refresh(conv)
+        return {"code": 0, "message": "已是好友", "data": {"id": conv.id, "partner": _partner_info(conv, current_user.id)}}
 
     # 检查是否已有待处理请求
-    from ..models.friend_request import FriendRequest
-    existing_req = db.query(FriendRequest).filter(
-        FriendRequest.sender_id == current_user.id,
-        FriendRequest.receiver_id == user_id,
-        FriendRequest.status == "pending",
-    ).first()
+    existing_req = next((item for item in relations if item.sender_id == current_user.id and item.status == "pending"), None)
     if existing_req:
         return {"code": 0, "message": "已发送好友请求，等待对方同意", "data": None}
 
     # 如果对方也向我发过请求，直接接受
-    reverse_req = db.query(FriendRequest).filter(
-        FriendRequest.sender_id == user_id,
-        FriendRequest.receiver_id == current_user.id,
-        FriendRequest.status == "pending",
-    ).first()
+    reverse_req = next((item for item in relations if item.sender_id == user_id and item.status == "pending"), None)
     if reverse_req:
         reverse_req.status = "accepted"
-        conv = Conversation(user1_id=u1, user2_id=u2, is_accepted=1)
-        db.add(conv)
+        conv = existing_conv or Conversation(user1_id=u1, user2_id=u2, is_accepted=1, is_group=False)
+        conv.is_accepted = 1
+        if existing_conv is None:
+            db.add(conv)
         db.commit()
         db.refresh(conv)
         return {"code": 0, "message": "已互为好友", "data": {"id": conv.id, "partner": _partner_info(conv, current_user.id)}}
 
-    # 发送好友请求
-    req = FriendRequest(sender_id=current_user.id, receiver_id=user_id)
-    db.add(req)
+    # 拒绝或删除后的记录直接复用，避免重复好友记录。
+    req = relations[0] if relations else FriendRequest()
+    for duplicate in relations[1:]:
+        db.delete(duplicate)
+    if relations[1:]:
+        db.flush()
+    req.sender_id = current_user.id
+    req.receiver_id = user_id
+    req.status = "pending"
+    if not relations:
+        db.add(req)
     db.commit()
 
     # 通知接收者
@@ -397,10 +442,100 @@ async def get_conversation_members(
     if not conv.is_group:
         return {"code": 0, "message": "ok", "data": [_partner_info(conv, current_user.id)]}
     members = db.query(ConversationMember).filter(ConversationMember.conversation_id == conv.id).all()
+    member_ids = [member.user_id for member in members]
+    from ..models.friend_request import FriendRequest
+    relations = db.query(FriendRequest).filter(
+        or_(
+            (FriendRequest.sender_id == current_user.id) & FriendRequest.receiver_id.in_(member_ids),
+            (FriendRequest.receiver_id == current_user.id) & FriendRequest.sender_id.in_(member_ids),
+        )
+    ).all()
+    relation_by_user = {}
+    for relation in relations:
+        other_id = relation.receiver_id if relation.sender_id == current_user.id else relation.sender_id
+        relation_by_user[other_id] = relation
+    direct_conversations = db.query(Conversation).filter(
+        Conversation.is_group == False,
+        Conversation.is_accepted == 1,
+        or_(
+            (Conversation.user1_id == current_user.id) & Conversation.user2_id.in_(member_ids),
+            (Conversation.user2_id == current_user.id) & Conversation.user1_id.in_(member_ids),
+        ),
+    ).all()
+    direct_by_user = {
+        conversation.user2_id if conversation.user1_id == current_user.id else conversation.user1_id: conversation.id
+        for conversation in direct_conversations
+    }
+
+    def member_dict(member):
+        relation = relation_by_user.get(member.user_id)
+        if member.user_id == current_user.id:
+            friendship_status = "self"
+        elif relation and relation.status == "accepted":
+            friendship_status = "friend"
+        elif relation and relation.status == "pending":
+            friendship_status = "pending_outgoing" if relation.sender_id == current_user.id else "pending_incoming"
+        else:
+            friendship_status = "none"
+        return {
+            "id": member.user.id,
+            "nickname": member.user.nickname,
+            "username": member.user.username,
+            "role": member.role or "member",
+            "friendship_status": friendship_status,
+            "direct_conversation_id": direct_by_user.get(member.user_id),
+        }
     return {"code": 0, "message": "ok", "data": [
-        {"id": m.user.id, "nickname": m.user.nickname, "username": m.user.username, "role": m.role or "member"}
-        for m in members if m.user
+        member_dict(member) for member in members if member.user
     ]}
+
+
+@router.post("/conversations/{conv_id}/members", summary="邀请好友加入群聊")
+async def add_group_members(
+    conv_id: int,
+    body: GroupMembersAddRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    conv, _ = _require_group_manager(db, conv_id, current_user)
+    user_ids = list(dict.fromkeys(body.user_ids))
+    existing_ids = set(_group_member_ids(db, conv.id))
+
+    if current_user.id in user_ids or any(user_id in existing_ids for user_id in user_ids):
+        raise HTTPException(status_code=400, detail="邀请名单中包含现有群成员")
+    if len(existing_ids) + len(user_ids) > 100:
+        raise HTTPException(status_code=400, detail="群成员不能超过 100 人")
+
+    targets = db.query(User).filter(User.id.in_(user_ids), User.is_active == True).all()
+    if len(targets) != len(user_ids):
+        raise HTTPException(status_code=404, detail="邀请成员不存在或已停用")
+
+    from ..models.friend_request import FriendRequest
+    friend_rows = db.query(FriendRequest).filter(
+        FriendRequest.status == "accepted",
+        or_(
+            (FriendRequest.sender_id == current_user.id) & FriendRequest.receiver_id.in_(user_ids),
+            (FriendRequest.receiver_id == current_user.id) & FriendRequest.sender_id.in_(user_ids),
+        ),
+    ).all()
+    friend_ids = {
+        row.receiver_id if row.sender_id == current_user.id else row.sender_id
+        for row in friend_rows
+    }
+    if friend_ids != set(user_ids):
+        raise HTTPException(status_code=400, detail="只能邀请你已添加的好友")
+
+    for user_id in user_ids:
+        db.add(ConversationMember(conversation_id=conv.id, user_id=user_id, role="member"))
+        db.add(Notification(
+            user_id=user_id,
+            title=f"👥 {current_user.nickname} 邀请你加入群聊",
+            content=f"你已加入群聊：{conv.group_name or '群聊'}",
+            type="group_invite",
+            related_url=f"/chat/{conv.id}",
+        ))
+    db.commit()
+    return {"code": 0, "message": "成员已加入群聊", "data": {"user_ids": user_ids}}
 
 
 def _require_group_member(db: Session, conv_id: int, current_user: User) -> Conversation:
@@ -443,14 +578,16 @@ async def set_group_member_role(conv_id: int, user_id: int, body: GroupMemberRol
 
 @router.delete("/conversations/{conv_id}/members/{user_id}")
 async def remove_group_member(conv_id: int, user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    conv, actor = _require_group_manager(db, conv_id, current_user)
+    conv, membership = _require_group_manager(db, conv_id, current_user)
     target = _group_membership(db, conv.id, user_id)
     if not target:
         raise HTTPException(status_code=404, detail="Group member not found")
     if target.user_id == current_user.id:
-        raise HTTPException(status_code=400, detail="Use a future leave-group flow to remove yourself")
+        raise HTTPException(status_code=400, detail="不能将自己移出群聊")
     if target.role == "owner":
-        raise HTTPException(status_code=403, detail="The group owner cannot be removed")
+        raise HTTPException(status_code=403, detail="群主不能被移出群聊")
+    if membership.role == "admin" and target.role != "member":
+        raise HTTPException(status_code=403, detail="群管理员只能移出普通成员")
     db.delete(target)
     db.commit()
     return {"code": 0, "data": {"user_id": user_id}}
@@ -458,7 +595,7 @@ async def remove_group_member(conv_id: int, user_id: int, db: Session = Depends(
 
 @router.delete("/conversations/{conv_id}")
 async def dissolve_group(conv_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    conv, _ = _require_group_manager(db, conv_id, current_user)
+    conv, _ = _require_group_owner(db, conv_id, current_user)
     file_urls = [row[0] for row in db.query(ChatMessage.file_url).filter(ChatMessage.conversation_id == conv.id, ChatMessage.file_url.isnot(None)).all()]
     file_urls.extend(row[0] for row in db.query(SharedFile.file_url).filter(SharedFile.conversation_id == conv.id).all())
     from ..models.notification import Notification
@@ -485,12 +622,12 @@ async def dissolve_group(conv_id: int, db: Session = Depends(get_db), current_us
 
 def _announcement_dict(item: GroupAnnouncement, db: Session):
     creator = db.query(User).filter(User.id == item.creator_id).first()
-    return {"id": item.id, "conversation_id": item.conversation_id, "title": item.title, "content": item.content, "source_message_id": item.source_message_id, "creator_id": item.creator_id, "creator_name": creator.nickname if creator else None, "created_at": item.created_at.isoformat() if item.created_at else None, "updated_at": item.updated_at.isoformat() if item.updated_at else None}
+    return {"id": item.id, "conversation_id": item.conversation_id, "title": item.title, "content": item.content, "source_message_id": item.source_message_id, "creator_id": item.creator_id, "creator_name": creator.nickname if creator else None, "created_at": to_beijing_iso(item.created_at), "updated_at": to_beijing_iso(item.updated_at)}
 
 
 def _todo_dict(item: GroupTodo, db: Session):
     creator = db.query(User).filter(User.id == item.creator_id).first()
-    return {"id": item.id, "conversation_id": item.conversation_id, "title": item.title, "source_message_id": item.source_message_id, "creator_id": item.creator_id, "creator_name": creator.nickname if creator else None, "is_completed": item.is_completed, "completed_at": item.completed_at.isoformat() if item.completed_at else None, "created_at": item.created_at.isoformat() if item.created_at else None, "updated_at": item.updated_at.isoformat() if item.updated_at else None}
+    return {"id": item.id, "conversation_id": item.conversation_id, "title": item.title, "source_message_id": item.source_message_id, "creator_id": item.creator_id, "creator_name": creator.nickname if creator else None, "is_completed": item.is_completed, "completed_at": to_beijing_iso(item.completed_at), "created_at": to_beijing_iso(item.created_at), "updated_at": to_beijing_iso(item.updated_at)}
 
 
 @router.get("/conversations/{conv_id}/announcements")
@@ -512,6 +649,17 @@ async def create_group_announcement(conv_id: int, body: GroupAnnouncementRequest
     return {"code": 0, "data": _announcement_dict(item, db)}
 
 
+@router.put("/announcements/{announcement_id}")
+async def update_group_announcement(announcement_id: int, body: GroupAnnouncementRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    item = db.query(GroupAnnouncement).filter(GroupAnnouncement.id == announcement_id).first()
+    if not item: raise HTTPException(status_code=404, detail="Announcement not found")
+    _require_group_manager(db, item.conversation_id, current_user)
+    _check_source_message(db, item.conversation_id, body.source_message_id)
+    item.title, item.content, item.source_message_id = body.title.strip(), (body.content or "").strip() or None, body.source_message_id
+    db.commit(); db.refresh(item)
+    return {"code": 0, "data": _announcement_dict(item, db)}
+
+
 @router.delete("/announcements/{announcement_id}")
 async def delete_group_announcement(announcement_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     item = db.query(GroupAnnouncement).filter(GroupAnnouncement.id == announcement_id).first()
@@ -523,7 +671,10 @@ async def delete_group_announcement(announcement_id: int, db: Session = Depends(
 @router.get("/conversations/{conv_id}/todos")
 async def list_group_todos(conv_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     _require_group_member(db, conv_id, current_user)
-    items = db.query(GroupTodo).filter(GroupTodo.conversation_id == conv_id).order_by(GroupTodo.is_completed, GroupTodo.updated_at.desc()).all()
+    items = db.query(GroupTodo).filter(
+        GroupTodo.conversation_id == conv_id,
+        GroupTodo.is_completed == False,
+    ).order_by(GroupTodo.updated_at.desc()).all()
     return {"code": 0, "data": [_todo_dict(item, db) for item in items]}
 
 
@@ -536,6 +687,17 @@ async def create_group_todo(conv_id: int, body: GroupTodoRequest, db: Session = 
     for member_id in _group_member_ids(db, conv.id):
         if member_id != current_user.id:
             create_notification(db, member_id, "群待办", f"{current_user.nickname} 创建了群待办：{item.title}", "group_todo", related_url=f"/chat/{conv.id}")
+    return {"code": 0, "data": _todo_dict(item, db)}
+
+
+@router.put("/todos/{todo_id}")
+async def update_group_todo(todo_id: int, body: GroupTodoRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    item = db.query(GroupTodo).filter(GroupTodo.id == todo_id).first()
+    if not item: raise HTTPException(status_code=404, detail="Todo not found")
+    _require_group_manager(db, item.conversation_id, current_user)
+    _check_source_message(db, item.conversation_id, body.source_message_id)
+    item.title, item.source_message_id = body.title.strip(), body.source_message_id
+    db.commit(); db.refresh(item)
     return {"code": 0, "data": _todo_dict(item, db)}
 
 
@@ -769,8 +931,22 @@ async def delete_message(
     if msg.sender_id != current_user.id and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="只能删除自己的消息")
 
-    # 删除媒体文件
-    if msg.file_url:
+    shared_references = db.query(SharedFile).filter(SharedFile.source_msg_id == msg.id).all()
+    for shared in shared_references:
+        if shared.msg_type == "text" and not shared.content:
+            shared.content = msg.content
+        shared.source_msg_id = None
+    has_shared_file = bool(msg.file_url and db.query(SharedFile.id).filter(
+        SharedFile.file_url == msg.file_url
+    ).first())
+    db.query(FavoriteMessage).filter(FavoriteMessage.chat_message_id == msg.id).delete(
+        synchronize_session=False
+    )
+    # 先解除共享文件到来源消息的外键，再删除来源消息，避免数据库按错误顺序执行。
+    db.flush()
+
+    # 仍被共享文件引用的媒体必须保留。
+    if msg.file_url and not has_shared_file:
         fname = msg.file_url.rsplit("/", 1)[-1]
         fpath = os.path.join(UPLOAD_DIR, fname)
         if os.path.exists(fpath):
@@ -895,7 +1071,7 @@ async def list_favorites(
         if msg:
             item = _msg_to_dict(msg)
             item["fav_id"] = fav.id
-            item["fav_time"] = fav.created_at.isoformat() if fav.created_at else None
+            item["fav_time"] = to_beijing_iso(fav.created_at)
             # 附上会话伙伴信息
             conv = db.query(Conversation).filter(Conversation.id == msg.conversation_id).first()
             if conv and _is_conversation_member(db, conv, current_user.id):
@@ -943,8 +1119,8 @@ async def list_friend_requests(
     return {
         "code": 0, "message": "ok",
         "data": {
-            "received": [{"id": r.id, "sender_id": r.sender_id, "sender_name": r.sender.nickname, "created_at": r.created_at.isoformat() if r.created_at else None} for r in received],
-            "sent": [{"id": r.id, "receiver_id": r.receiver_id, "receiver_name": r.receiver.nickname, "created_at": r.created_at.isoformat() if r.created_at else None} for r in sent],
+            "received": [{"id": r.id, "sender_id": r.sender_id, "sender_name": r.sender.nickname, "created_at": to_beijing_iso(r.created_at)} for r in received],
+            "sent": [{"id": r.id, "receiver_id": r.receiver_id, "receiver_name": r.receiver.nickname, "created_at": to_beijing_iso(r.created_at)} for r in sent],
         },
     }
 
@@ -957,13 +1133,21 @@ async def accept_friend_request(
 ):
     from ..models.friend_request import FriendRequest
     req = db.query(FriendRequest).filter(FriendRequest.id == req_id, FriendRequest.receiver_id == current_user.id).first()
-    if not req:
+    if not req or req.status != "pending":
         raise HTTPException(status_code=404, detail="请求不存在")
     req.status = "accepted"
     u1 = min(req.sender_id, req.receiver_id)
     u2 = max(req.sender_id, req.receiver_id)
-    conv = Conversation(user1_id=u1, user2_id=u2, is_accepted=1)
-    db.add(conv)
+    conv = db.query(Conversation).filter(
+        Conversation.user1_id == u1,
+        Conversation.user2_id == u2,
+        Conversation.is_group == False,
+    ).order_by(Conversation.id.asc()).first()
+    if conv is None:
+        conv = Conversation(user1_id=u1, user2_id=u2, is_accepted=1, is_group=False)
+        db.add(conv)
+    else:
+        conv.is_accepted = 1
     db.commit()
     db.refresh(conv)
 
@@ -1009,6 +1193,52 @@ async def reject_friend_request(
     return {"code": 0, "message": "已拒绝", "data": None}
 
 
+@router.delete("/friends/{user_id}", summary="删除好友")
+async def delete_friend(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from ..models.friend_request import FriendRequest
+    from ..models.schedule import Schedule
+    from ..models.schedule_management import ScheduleManagementPermission, ScheduleViewer
+
+    relations = db.query(FriendRequest).filter(
+        FriendRequest.status == "accepted",
+        or_(
+            (FriendRequest.sender_id == current_user.id) & (FriendRequest.receiver_id == user_id),
+            (FriendRequest.sender_id == user_id) & (FriendRequest.receiver_id == current_user.id),
+        ),
+    ).all()
+    if not relations:
+        raise HTTPException(status_code=404, detail="好友关系不存在")
+
+    for relation in relations:
+        relation.status = "removed"
+    db.query(Conversation).filter(
+        Conversation.is_group == False,
+        Conversation.user1_id == min(current_user.id, user_id),
+        Conversation.user2_id == max(current_user.id, user_id),
+    ).update({"is_accepted": 0}, synchronize_session=False)
+
+    permissions = db.query(ScheduleManagementPermission).filter(or_(
+        (ScheduleManagementPermission.owner_id == current_user.id) & (ScheduleManagementPermission.requester_id == user_id),
+        (ScheduleManagementPermission.owner_id == user_id) & (ScheduleManagementPermission.requester_id == current_user.id),
+    )).all()
+    for permission in permissions:
+        permission.status = "revoked"
+        permission.expires_at = None
+
+    my_schedule_ids = db.query(Schedule.id).filter(Schedule.created_by == current_user.id)
+    friend_schedule_ids = db.query(Schedule.id).filter(Schedule.created_by == user_id)
+    db.query(ScheduleViewer).filter(or_(
+        (ScheduleViewer.user_id == user_id) & ScheduleViewer.schedule_id.in_(my_schedule_ids),
+        (ScheduleViewer.user_id == current_user.id) & ScheduleViewer.schedule_id.in_(friend_schedule_ids),
+    )).delete(synchronize_session=False)
+    db.commit()
+    return {"code": 0, "message": "好友已删除，原聊天记录将在重新添加后恢复", "data": None}
+
+
 # ==================== 共享文件 ====================
 
 @router.get("/conversations/{conv_id}/files", summary="对话共享文件列表")
@@ -1025,9 +1255,7 @@ async def list_shared_files(
     files = q.order_by(SharedFile.created_at.desc()).all()
     return {
         "code": 0, "message": "ok",
-        "data": [{"id": f.id, "file_url": f.file_url, "file_name": f.file_name, "file_size": f.file_size,
-                   "msg_type": f.msg_type, "tag": f.tag, "note": f.note, "uploader_name": f.uploader.nickname if f.uploader else None,
-                   "created_at": f.created_at.isoformat() if f.created_at else None} for f in files],
+        "data": [_shared_file_to_dict(f) for f in files],
     }
 
 
@@ -1063,6 +1291,7 @@ async def add_shared_file(
             file_name=msg.file_name or (msg.content or "文字消息")[:80],
             file_size=msg.file_size,
             msg_type=msg.msg_type,
+            content=msg.content if msg.msg_type == "text" else None,
             source_msg_id=msg_id,
             tag=tag,
             note=note,
@@ -1071,18 +1300,27 @@ async def add_shared_file(
         db.commit()
         return {"code": 0, "message": "已添加到共享文件", "data": None}
     elif file:
-        contents = await file.read()
-        if len(contents) > MAX_SIZE: raise HTTPException(status_code=400, detail="文件不能超过 50MB")
         _ensure_upload_dir()
         original_name = file.filename or "file.bin"
         ext = os.path.splitext(original_name)[1] or ".bin"
         stored = f"{uuid.uuid4().hex}{ext}"
         path = os.path.join(UPLOAD_DIR, stored)
-        with open(path, "wb") as f: f.write(contents)
+        total_size = 0
+        try:
+            with open(path, "wb") as target:
+                while chunk := await file.read(1024 * 1024):
+                    total_size += len(chunk)
+                    if total_size > MAX_SIZE:
+                        raise HTTPException(status_code=400, detail="文件不能超过 50MB")
+                    target.write(chunk)
+        except Exception:
+            if os.path.exists(path):
+                os.remove(path)
+            raise
         mime = file.content_type or "application/octet-stream"
         sf = SharedFile(conversation_id=conv_id, uploader_id=current_user.id,
                         file_url=f"/api/v1/chat/messages/media/{stored}",
-                        file_name=original_name, file_size=len(contents), msg_type=_guess_msg_type(mime), tag=tag, note=note)
+                        file_name=original_name, file_size=total_size, msg_type=_guess_msg_type(mime), tag=tag, note=note)
         db.add(sf)
         db.commit()
         return {"code": 0, "message": "文件已上传", "data": None}
@@ -1098,11 +1336,27 @@ async def delete_shared_file(
     sf = db.query(SharedFile).filter(SharedFile.id == file_id).first()
     if not sf: raise HTTPException(status_code=404, detail="文件不存在")
     _require_conversation_member(db, sf.conversation_id, current_user)
-    if current_user.role != "admin" and sf.uploader_id != current_user.id:
+    if not sf.conversation.is_group and current_user.role != "admin" and sf.uploader_id != current_user.id:
         raise HTTPException(status_code=403, detail="只能删除自己上传的共享文件")
+    if not sf.source_msg_id and sf.file_url:
+        path = os.path.join(UPLOAD_DIR, os.path.basename(sf.file_url))
+        if os.path.exists(path): os.remove(path)
     db.delete(sf)
     db.commit()
     return {"code": 0, "message": "已删除", "data": None}
+
+
+@router.put("/files/{file_id}", summary="修改共享文件标签和备注")
+async def update_shared_file(file_id: int, body: SharedFileUpdateRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    sf = db.query(SharedFile).filter(SharedFile.id == file_id).first()
+    if not sf: raise HTTPException(status_code=404, detail="文件不存在")
+    _require_conversation_member(db, sf.conversation_id, current_user)
+    if not sf.conversation.is_group and current_user.role != "admin" and sf.uploader_id != current_user.id:
+        raise HTTPException(status_code=403, detail="只能修改自己上传的共享文件")
+    sf.tag = (body.tag or "").strip() or None
+    sf.note = (body.note or "").strip() or None
+    db.commit(); db.refresh(sf)
+    return {"code": 0, "data": {"id": sf.id, "tag": sf.tag, "note": sf.note}}
 
 
 # ==================== 搜索 ====================
@@ -1117,11 +1371,20 @@ async def search_chat(
     keyword = f"%{q.strip()}%"
     results = {"messages": [], "files": []}
 
-    # 获取我参与的所有已接受对话
-    my_conv_ids = [c[0] for c in db.query(Conversation.id).filter(
+    # 私聊按双方字段判断，群聊必须按成员表判断。
+    direct_ids = [c[0] for c in db.query(Conversation.id).filter(
+        Conversation.is_group == False,
         or_(Conversation.user1_id == current_user.id, Conversation.user2_id == current_user.id),
         Conversation.is_accepted == 1,
     ).all()]
+    group_ids = [row[0] for row in db.query(ConversationMember.conversation_id).join(
+        Conversation, Conversation.id == ConversationMember.conversation_id
+    ).filter(
+        ConversationMember.user_id == current_user.id,
+        Conversation.is_group == True,
+        Conversation.is_accepted == 1,
+    ).all()]
+    my_conv_ids = list(set(direct_ids + group_ids))
 
     if my_conv_ids:
         # 搜索消息
@@ -1137,14 +1400,14 @@ async def search_chat(
         # 搜索共享文件
         sfs = db.query(SharedFile).filter(
             SharedFile.conversation_id.in_(my_conv_ids),
-            SharedFile.file_name.ilike(keyword),
+            or_(SharedFile.file_name.ilike(keyword), SharedFile.content.ilike(keyword)),
         ).order_by(SharedFile.created_at.desc()).limit(30).all()
         for sf in sfs:
-            results["files"].append({
-                "id": sf.id, "file_url": sf.file_url, "file_name": sf.file_name, "file_size": sf.file_size,
-                "msg_type": sf.msg_type, "conv_id": sf.conversation_id, "uploader_name": sf.uploader.nickname if sf.uploader else None,
-                "created_at": sf.created_at.isoformat() if sf.created_at else None,
-            })
+            item = _shared_file_to_dict(sf)
+            item["conv_id"] = item.pop("conversation_id")
+            conv = db.query(Conversation).filter(Conversation.id == sf.conversation_id).first()
+            item["partner"] = _partner_info(conv, current_user.id) if conv else None
+            results["files"].append(item)
 
     return {"code": 0, "message": "ok", "data": results}
 
@@ -1154,18 +1417,20 @@ async def search_chat(
 @router.get("/contacts", summary="可聊天的用户列表")
 async def list_contacts(
     friends_only: bool = Query(False),
+    q: str | None = Query(None, max_length=50),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """获取所有活跃用户（排除自己，只返回有用户名的）"""
+    """群聊返回好友；添加好友必须搜索后才返回匹配用户。"""
     query = db.query(User).filter(
         User.is_active == True,
         User.id != current_user.id,
         User.username.isnot(None),
         User.username != "",
     )
+    from ..models.friend_request import FriendRequest
+    keyword = (q or "").strip()
     if friends_only:
-        from ..models.friend_request import FriendRequest
         requests = db.query(FriendRequest).filter(
             FriendRequest.status == "accepted",
             or_(FriendRequest.sender_id == current_user.id, FriendRequest.receiver_id == current_user.id),
@@ -1175,7 +1440,26 @@ async def list_contacts(
             for request in requests
         ]
         query = query.filter(User.id.in_(friend_ids))
-    users = query.order_by(User.nickname).all()
+        if keyword:
+            pattern = f"%{keyword}%"
+            query = query.filter(or_(User.nickname.ilike(pattern), User.username.ilike(pattern)))
+        users = query.order_by(User.nickname).all()
+    elif not keyword:
+        users = []
+    else:
+        blocked_requests = db.query(FriendRequest).filter(
+            FriendRequest.status.in_(("accepted", "pending")),
+            or_(FriendRequest.sender_id == current_user.id, FriendRequest.receiver_id == current_user.id),
+        ).all()
+        blocked_ids = {
+            item.receiver_id if item.sender_id == current_user.id else item.sender_id
+            for item in blocked_requests
+        }
+        pattern = f"%{keyword}%"
+        query = query.filter(or_(User.nickname.ilike(pattern), User.username.ilike(pattern)))
+        if blocked_ids:
+            query = query.filter(~User.id.in_(blocked_ids))
+        users = query.order_by(User.nickname).limit(20).all()
     return {
         "code": 0,
         "message": "ok",

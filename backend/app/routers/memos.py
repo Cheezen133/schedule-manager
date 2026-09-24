@@ -15,6 +15,7 @@ from ..models.favorite import FavoriteMessage
 from ..models.memo import MemoCase, MemoFile, MemoFolder, GroupAnnouncement, GroupTodo, Patient, PatientGroup, PatientGroupMember, PatientTimelineEntry
 from ..models.shared_file import SharedFile
 from ..models.user import User
+from ..utils.datetime_utils import to_beijing_iso, to_utc_naive
 
 router = APIRouter(prefix="/api/v1/memos", tags=["Memos"])
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "uploads", "memos")
@@ -56,13 +57,19 @@ def owned(model, item_id, user, db):
     return item
 
 def group_ids(user, db):
-    return [row[0] for row in db.query(ConversationMember.conversation_id).filter(ConversationMember.user_id == user.id).all()]
+    return [row[0] for row in db.query(ConversationMember.conversation_id).join(Conversation).filter(ConversationMember.user_id == user.id, Conversation.is_group == True).all()]
 
 def group_name_map(ids, db):
     return {item.id: item.group_name or "未命名群聊" for item in db.query(Conversation).filter(Conversation.id.in_(ids)).all()} if ids else {}
 
+@router.get("/team/groups")
+def team_groups(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    ids = group_ids(current_user, db)
+    memberships = {item.conversation_id: item.role for item in db.query(ConversationMember).filter(ConversationMember.user_id == current_user.id, ConversationMember.conversation_id.in_(ids)).all()}
+    return {"code": 0, "data": [{"id": item.id, "name": item.group_name or "未命名群聊", "role": memberships.get(item.id, "member"), "can_manage": memberships.get(item.id) in ("owner", "admin")} for item in db.query(Conversation).filter(Conversation.id.in_(ids)).order_by(Conversation.group_name).all()]}
+
 def file_dict(item, sender_name=None):
-    return {"id": item.id, "name": item.name, "folder_id": item.folder_id, "tags": item.tags, "file_size": item.file_size, "content_type": item.content_type, "created_at": item.created_at.isoformat() if item.created_at else None, "sender_name": sender_name, "download_url": f"/api/v1/memos/files/{item.id}/download"}
+    return {"id": item.id, "name": item.name, "folder_id": item.folder_id, "tags": item.tags, "file_size": item.file_size, "content_type": item.content_type, "created_at": to_beijing_iso(item.created_at), "sender_name": sender_name, "download_url": f"/api/v1/memos/files/{item.id}/download"}
 
 def chat_download_url(file_url):
     if not file_url or "/media/" not in file_url:
@@ -80,7 +87,7 @@ def patient_groups(patient_id, db):
     return [{"id": item.id, "name": item.name, "sort_order": item.sort_order} for item in db.query(PatientGroup).join(PatientGroupMember, PatientGroupMember.group_id == PatientGroup.id).filter(PatientGroupMember.patient_id == patient_id).order_by(PatientGroup.sort_order, PatientGroup.name).all()]
 
 def patient_dict(item, db):
-    return {"id": item.id, "name": item.name, "gender": item.gender, "birth_date": item.birth_date.isoformat() if item.birth_date else None, "phone": item.phone, "allergies": item.allergies, "medical_history": item.medical_history, "notes": item.notes, "is_archived": item.is_archived, "created_at": item.created_at.isoformat() if item.created_at else None, "updated_at": item.updated_at.isoformat() if item.updated_at else None, "groups": patient_groups(item.id, db)}
+    return {"id": item.id, "name": item.name, "gender": item.gender, "birth_date": item.birth_date.isoformat() if item.birth_date else None, "phone": item.phone, "allergies": item.allergies, "medical_history": item.medical_history, "notes": item.notes, "is_archived": item.is_archived, "created_at": to_beijing_iso(item.created_at), "updated_at": to_beijing_iso(item.updated_at), "groups": patient_groups(item.id, db)}
 
 def set_patient_groups(patient, group_ids, user, db):
     ids = sorted(set(group_ids or []))
@@ -165,15 +172,16 @@ def list_timeline(patient_id: int, q: str | None = None, record_type: str | None
     query = db.query(PatientTimelineEntry).filter(PatientTimelineEntry.patient_id == patient_id)
     if q: query = query.filter(or_(PatientTimelineEntry.title.contains(q), PatientTimelineEntry.content.contains(q)))
     if record_type: query = query.filter(PatientTimelineEntry.record_type == record_type)
-    if date_from: query = query.filter(PatientTimelineEntry.occurred_at >= date_from)
-    if date_to: query = query.filter(PatientTimelineEntry.occurred_at <= date_to)
-    return {"code": 0, "data": [{"id": item.id, "record_type": item.record_type, "occurred_at": item.occurred_at.isoformat(), "title": item.title, "content": item.content, "updated_at": item.updated_at.isoformat() if item.updated_at else None} for item in query.order_by(PatientTimelineEntry.occurred_at.desc()).all()]}
+    if date_from: query = query.filter(PatientTimelineEntry.occurred_at >= to_utc_naive(date_from))
+    if date_to: query = query.filter(PatientTimelineEntry.occurred_at <= to_utc_naive(date_to))
+    return {"code": 0, "data": [{"id": item.id, "record_type": item.record_type, "occurred_at": to_beijing_iso(item.occurred_at), "title": item.title, "content": item.content, "updated_at": to_beijing_iso(item.updated_at)} for item in query.order_by(PatientTimelineEntry.occurred_at.desc()).all()]}
 
 @router.post("/patients/{patient_id}/timeline")
 def create_timeline(patient_id: int, data: TimelineIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     patient_owned(patient_id, current_user, db, include_archived=False)
     if data.record_type not in {"visit", "diagnosis", "treatment", "examination", "followup", "condition"}: raise HTTPException(400, "Invalid record type")
-    item = PatientTimelineEntry(patient_id=patient_id, **data.model_dump()); db.add(item); db.commit(); db.refresh(item)
+    values = data.model_dump(); values["occurred_at"] = to_utc_naive(data.occurred_at)
+    item = PatientTimelineEntry(patient_id=patient_id, **values); db.add(item); db.commit(); db.refresh(item)
     return {"code": 0, "data": {"id": item.id}}
 
 @router.put("/patients/{patient_id}/timeline/{entry_id}")
@@ -181,7 +189,8 @@ def update_timeline(patient_id: int, entry_id: int, data: TimelineIn, db: Sessio
     patient_owned(patient_id, current_user, db, include_archived=False)
     item = db.query(PatientTimelineEntry).filter(PatientTimelineEntry.id == entry_id, PatientTimelineEntry.patient_id == patient_id).first()
     if not item: raise HTTPException(404, "Timeline entry not found")
-    for key, value in data.model_dump().items(): setattr(item, key, value)
+    values = data.model_dump(); values["occurred_at"] = to_utc_naive(data.occurred_at)
+    for key, value in values.items(): setattr(item, key, value)
     db.commit(); return {"code": 0}
 
 @router.delete("/patients/{patient_id}/timeline/{entry_id}")
@@ -207,7 +216,13 @@ def add_folder(data: FolderIn, db: Session = Depends(get_db), current_user: User
 def update_folder(folder_id: int, data: FolderIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     item = owned(MemoFolder, folder_id, current_user, db)
     if data.parent_id == folder_id: raise HTTPException(400, "Folder cannot be its own parent")
-    if data.parent_id is not None: owned(MemoFolder, data.parent_id, current_user, db)
+    if data.parent_id is not None:
+        parent = owned(MemoFolder, data.parent_id, current_user, db)
+        seen = set()
+        while parent and parent.id not in seen:
+            if parent.id == item.id: raise HTTPException(400, "Folder cannot be moved into its child")
+            seen.add(parent.id)
+            parent = db.get(MemoFolder, parent.parent_id) if parent.parent_id else None
     item.name, item.parent_id = data.name.strip(), data.parent_id
     db.commit(); return {"code": 0}
 
@@ -229,14 +244,21 @@ def list_files(folder_id: int | None = None, q: str | None = None, tag: str | No
 @router.post("/files")
 async def upload_file(file: UploadFile = File(...), folder_id: int | None = Form(None), tags: str | None = Form(None), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if folder_id is not None: owned(MemoFolder, folder_id, current_user, db)
-    content = await file.read()
-    if len(content) > MAX_FILE_SIZE: raise HTTPException(400, "文件不能超过 50MB")
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     name = os.path.basename(file.filename or "file.bin")
     stored_name = f"{uuid.uuid4().hex}{os.path.splitext(name)[1]}"
     path = os.path.join(UPLOAD_DIR, stored_name)
-    with open(path, "wb") as handle: handle.write(content)
-    item = MemoFile(owner_id=current_user.id, folder_id=folder_id, name=name, stored_name=stored_name, file_path=path, content_type=file.content_type or "application/octet-stream", file_size=len(content), tags=tags)
+    size = 0
+    try:
+        with open(path, "wb") as handle:
+            while chunk := await file.read(1024 * 1024):
+                size += len(chunk)
+                if size > MAX_FILE_SIZE: raise HTTPException(400, "文件不能超过 50MB")
+                handle.write(chunk)
+    except Exception:
+        if os.path.exists(path): os.remove(path)
+        raise
+    item = MemoFile(owner_id=current_user.id, folder_id=folder_id, name=name, stored_name=stored_name, file_path=path, content_type=file.content_type or "application/octet-stream", file_size=size, tags=tags)
     db.add(item); db.commit(); db.refresh(item)
     return {"code": 0, "data": file_dict(item, current_user.nickname)}
 
@@ -268,18 +290,18 @@ def favorites(q: str | None = None, msg_type: str | None = None, db: Session = D
     if msg_type: query = query.filter(ChatMessage.msg_type == msg_type)
     result = []
     for favorite, message, conversation in query.order_by(FavoriteMessage.created_at.desc()).all():
-        result.append({"id": favorite.id, "message_id": message.id, "content": message.content, "file_name": message.file_name, "file_url": message.file_url, "download_url": chat_download_url(message.file_url), "sender_name": message.sender.nickname if message.sender else None, "msg_type": message.msg_type, "conversation_id": conversation.id, "conversation_name": conversation.group_name or "聊天", "created_at": favorite.created_at.isoformat() if favorite.created_at else None})
+        result.append({"id": favorite.id, "message_id": message.id, "content": message.content, "file_name": message.file_name, "file_url": message.file_url, "download_url": chat_download_url(message.file_url), "sender_name": message.sender.nickname if message.sender else None, "msg_type": message.msg_type, "conversation_id": conversation.id, "conversation_name": conversation.group_name or "聊天", "created_at": to_beijing_iso(favorite.created_at)})
     return {"code": 0, "data": result}
 
 @router.get("/shared-files")
 def shared_files(q: str | None = None, conversation_id: int | None = None, tag: str | None = None, file_type: str | None = None, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     ids = group_ids(current_user, db)
-    query = db.query(SharedFile, Conversation).join(Conversation, SharedFile.conversation_id == Conversation.id).filter(or_((Conversation.is_group == True) & Conversation.id.in_(ids), (Conversation.is_group == False) & or_(Conversation.user1_id == current_user.id, Conversation.user2_id == current_user.id)))
-    if q: query = query.filter(SharedFile.file_name.contains(q))
+    query = db.query(SharedFile, Conversation).join(Conversation, SharedFile.conversation_id == Conversation.id).filter(or_((Conversation.is_group == True) & Conversation.id.in_(ids), (Conversation.is_group == False) & (Conversation.is_accepted == 1) & or_(Conversation.user1_id == current_user.id, Conversation.user2_id == current_user.id)))
+    if q: query = query.filter(or_(SharedFile.file_name.contains(q), SharedFile.content.contains(q)))
     if conversation_id: query = query.filter(SharedFile.conversation_id == conversation_id)
     if tag: query = query.filter(SharedFile.tag.contains(tag))
     if file_type: query = query.filter(SharedFile.msg_type == file_type)
-    return {"code": 0, "data": [{"id": item.id, "file_name": item.file_name, "file_size": item.file_size, "tag": item.tag, "msg_type": item.msg_type, "file_url": item.file_url, "download_url": chat_download_url(item.file_url), "sender_name": item.uploader.nickname if item.uploader else None, "conversation_id": conversation.id, "conversation_name": conversation.group_name or "聊天", "created_at": item.created_at.isoformat() if item.created_at else None} for item, conversation in query.order_by(SharedFile.created_at.desc()).all()]}
+    return {"code": 0, "data": [{"id": item.id, "file_name": item.file_name, "file_size": item.file_size, "tag": item.tag, "msg_type": item.msg_type, "content": item.content or (item.source_msg.content if item.msg_type == "text" and item.source_msg else None), "source_message_id": item.source_msg_id, "file_url": None if item.msg_type == "text" else item.file_url, "download_url": None if item.msg_type == "text" else chat_download_url(item.file_url), "sender_name": item.uploader.nickname if item.uploader else None, "conversation_id": conversation.id, "conversation_name": conversation.group_name or "聊天", "created_at": to_beijing_iso(item.created_at)} for item, conversation in query.order_by(SharedFile.created_at.desc()).all()]}
 
 @router.get("/team/{kind}")
 def team_items(kind: str, group_id: int | None = None, q: str | None = None, date_from: datetime | None = None, date_to: datetime | None = None, completed: bool | None = Query(None), file_type: str | None = None, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -291,22 +313,21 @@ def team_items(kind: str, group_id: int | None = None, q: str | None = None, dat
     if kind == "announcements":
         query = db.query(GroupAnnouncement).filter(GroupAnnouncement.conversation_id.in_(ids))
         if q: query = query.filter(or_(GroupAnnouncement.title.contains(q), GroupAnnouncement.content.contains(q)))
-        if date_from: query = query.filter(GroupAnnouncement.updated_at >= date_from)
-        if date_to: query = query.filter(GroupAnnouncement.updated_at <= date_to)
-        data = [{"id": x.id, "group_id": x.conversation_id, "group_name": names.get(x.conversation_id), "title": x.title, "content": x.content, "source_message_id": x.source_message_id, "creator_name": (db.get(User, x.creator_id).nickname if db.get(User, x.creator_id) else None), "updated_at": x.updated_at.isoformat() if x.updated_at else None} for x in query.order_by(GroupAnnouncement.updated_at.desc()).all()]
+        if date_from: query = query.filter(GroupAnnouncement.updated_at >= to_utc_naive(date_from))
+        if date_to: query = query.filter(GroupAnnouncement.updated_at <= to_utc_naive(date_to))
+        data = [{"id": x.id, "group_id": x.conversation_id, "group_name": names.get(x.conversation_id), "title": x.title, "content": x.content, "source_message_id": x.source_message_id, "creator_name": (db.get(User, x.creator_id).nickname if db.get(User, x.creator_id) else None), "updated_at": to_beijing_iso(x.updated_at)} for x in query.order_by(GroupAnnouncement.updated_at.desc()).all()]
     elif kind == "todos":
-        query = db.query(GroupTodo).filter(GroupTodo.conversation_id.in_(ids))
+        query = db.query(GroupTodo).filter(GroupTodo.conversation_id.in_(ids), GroupTodo.is_completed == False)
         if q: query = query.filter(GroupTodo.title.contains(q))
-        if completed is not None: query = query.filter(GroupTodo.is_completed == completed)
-        if date_from: query = query.filter(GroupTodo.updated_at >= date_from)
-        if date_to: query = query.filter(GroupTodo.updated_at <= date_to)
-        data = [{"id": x.id, "group_id": x.conversation_id, "group_name": names.get(x.conversation_id), "title": x.title, "source_message_id": x.source_message_id, "creator_name": (db.get(User, x.creator_id).nickname if db.get(User, x.creator_id) else None), "is_completed": x.is_completed, "updated_at": x.updated_at.isoformat() if x.updated_at else None} for x in query.order_by(GroupTodo.updated_at.desc()).all()]
+        if date_from: query = query.filter(GroupTodo.updated_at >= to_utc_naive(date_from))
+        if date_to: query = query.filter(GroupTodo.updated_at <= to_utc_naive(date_to))
+        data = [{"id": x.id, "group_id": x.conversation_id, "group_name": names.get(x.conversation_id), "title": x.title, "source_message_id": x.source_message_id, "creator_name": (db.get(User, x.creator_id).nickname if db.get(User, x.creator_id) else None), "is_completed": x.is_completed, "updated_at": to_beijing_iso(x.updated_at)} for x in query.order_by(GroupTodo.updated_at.desc()).all()]
     elif kind == "shared-files":
         query = db.query(SharedFile).filter(SharedFile.conversation_id.in_(ids))
-        if q: query = query.filter(SharedFile.file_name.contains(q))
+        if q: query = query.filter(or_(SharedFile.file_name.contains(q), SharedFile.content.contains(q)))
         if file_type: query = query.filter(SharedFile.msg_type == file_type)
-        if date_from: query = query.filter(SharedFile.created_at >= date_from)
-        if date_to: query = query.filter(SharedFile.created_at <= date_to)
-        data = [{"id": x.id, "group_id": x.conversation_id, "group_name": names.get(x.conversation_id), "file_name": x.file_name, "file_url": x.file_url, "download_url": chat_download_url(x.file_url), "sender_name": x.uploader.nickname if x.uploader else None, "msg_type": x.msg_type, "tag": x.tag, "created_at": x.created_at.isoformat() if x.created_at else None} for x in query.order_by(SharedFile.created_at.desc()).all()]
+        if date_from: query = query.filter(SharedFile.created_at >= to_utc_naive(date_from))
+        if date_to: query = query.filter(SharedFile.created_at <= to_utc_naive(date_to))
+        data = [{"id": x.id, "group_id": x.conversation_id, "group_name": names.get(x.conversation_id), "file_name": x.file_name, "content": x.content or (x.source_msg.content if x.msg_type == "text" and x.source_msg else None), "source_message_id": x.source_msg_id, "file_url": None if x.msg_type == "text" else x.file_url, "download_url": None if x.msg_type == "text" else chat_download_url(x.file_url), "sender_name": x.uploader.nickname if x.uploader else None, "msg_type": x.msg_type, "tag": x.tag, "created_at": to_beijing_iso(x.created_at)} for x in query.order_by(SharedFile.created_at.desc()).all()]
     else: raise HTTPException(404, "Unknown team section")
     return {"code": 0, "data": data}

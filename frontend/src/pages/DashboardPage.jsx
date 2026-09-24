@@ -86,7 +86,7 @@ export default function DashboardPage() {
 
   useEffect(() => { fetchData() }, [fetchData])
   useEffect(() => {
-    const timer = setInterval(refreshManagement, 10000)
+    const timer = setInterval(() => { if (document.visibilityState === 'visible') refreshManagement() }, 30000)
     return () => clearInterval(timer)
   }, [refreshManagement])
 

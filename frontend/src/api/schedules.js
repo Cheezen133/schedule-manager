@@ -11,7 +11,7 @@ export async function getSchedules(params = {}) {
 /**
  * 创建日程
  * @param {object} data - 日程数据
- * @param {number|null} forUser - 替谁创建（日程码管理）
+ * @param {number|null} forUser - 替哪位已授权好友创建
  */
 export async function createSchedule(data, forUser = null) {
   const params = {}
@@ -76,6 +76,18 @@ export function getIcalExportUrl(startDate, endDate) {
   if (startDate) params.set('start_date', startDate)
   if (endDate) params.set('end_date', endDate)
   return `/api/v1/schedules/export/ical?${params.toString()}`
+}
+
+/**
+ * 通过统一认证客户端导出当前日历对象，错误响应不会被当成 iCal 下载。
+ */
+export async function exportIcal(startDate, endDate, ownerId = null) {
+  const params = {}
+  if (startDate) params.start_date = startDate
+  if (endDate) params.end_date = endDate
+  if (ownerId) params.owner_id = ownerId
+  const res = await apiClient.get('/schedules/export/ical', { params, responseType: 'blob' })
+  return res.data
 }
 
 /**

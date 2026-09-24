@@ -10,6 +10,7 @@ from ..database import get_db
 from ..dependencies import get_current_user
 from ..models.user import User
 from ..models.schedule import Schedule
+from ..utils.datetime_utils import BEIJING, to_utc_naive
 
 router = APIRouter(prefix="/api/v1", tags=["仪表盘"])
 
@@ -26,8 +27,8 @@ async def dashboard_stats(
     - 按分类分布
     - 最近活动
     """
-    now = datetime.now(timezone.utc)
-    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    beijing_now = datetime.now(BEIJING)
+    month_start = to_utc_naive(beijing_now.replace(day=1, hour=0, minute=0, second=0, microsecond=0))
 
     # 非管理员只看自己的
     base_filter = []
@@ -95,7 +96,8 @@ async def dashboard_stats(
     # ---- 最近 7 天趋势 ----
     trend_data = []
     for i in range(6, -1, -1):
-        day_start = (now - timedelta(days=i)).replace(hour=0, minute=0, second=0, microsecond=0)
+        beijing_day = (beijing_now - timedelta(days=i)).replace(hour=0, minute=0, second=0, microsecond=0)
+        day_start = to_utc_naive(beijing_day)
         day_end = day_start + timedelta(days=1)
         day_count = _apply_filter(
             db.query(Schedule).filter(
@@ -103,7 +105,7 @@ async def dashboard_stats(
             )
         ).count()
         trend_data.append({
-            "date": day_start.strftime("%m-%d"),
+            "date": beijing_day.strftime("%m-%d"),
             "count": day_count,
         })
 

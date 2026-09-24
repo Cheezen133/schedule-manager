@@ -1,6 +1,7 @@
 """
 日程服务：业务逻辑层
 """
+import json
 import os
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
@@ -8,13 +9,85 @@ from sqlalchemy import and_
 from ..models.schedule import Schedule
 from ..models.verification import AuditLog
 from ..models.user import User
+from ..models.schedule_management import ScheduleViewer
 from ..schemas.schedule import ScheduleCreate, ScheduleUpdate
+from ..utils.datetime_utils import to_beijing_iso, to_utc_naive
+
+
+EDIT_SNAPSHOT_ACTION = "manager_edit_snapshot"
+SNAPSHOT_FIELDS = (
+    "title", "description", "start_time", "end_time", "is_all_day",
+    "is_important", "status", "reviewed_by", "reviewed_at",
+    "review_comment", "requires_owner_review", "category_id", "visibility",
+    "completer_name", "is_completed", "completed_at", "external_contact_name",
+    "external_contact_phone", "external_contact_wechat", "color",
+)
+SNAPSHOT_DATETIME_FIELDS = {"start_time", "end_time", "reviewed_at", "completed_at"}
+
+
+def create_manager_edit_snapshot(db: Session, schedule: Schedule, actor_id: int) -> None:
+    """Persist one pre-edit snapshot for an existing confirmed schedule."""
+    if schedule.status != "confirmed":
+        return
+    existing = db.query(AuditLog).filter(
+        AuditLog.schedule_id == schedule.id,
+        AuditLog.action == EDIT_SNAPSHOT_ACTION,
+    ).first()
+    if existing:
+        return
+    values = {}
+    for field in SNAPSHOT_FIELDS:
+        value = getattr(schedule, field)
+        values[field] = value.isoformat() if isinstance(value, datetime) else value
+    values["viewer_ids"] = [
+        row[0] for row in db.query(ScheduleViewer.user_id).filter(
+            ScheduleViewer.schedule_id == schedule.id
+        ).all()
+    ]
+    db.add(AuditLog(
+        schedule_id=schedule.id,
+        action=EDIT_SNAPSHOT_ACTION,
+        performed_by=actor_id,
+        detail=json.dumps(values, ensure_ascii=False),
+    ))
+
+
+def _pending_manager_edit_snapshot(db: Session, schedule_id: int) -> AuditLog | None:
+    return db.query(AuditLog).filter(
+        AuditLog.schedule_id == schedule_id,
+        AuditLog.action == EDIT_SNAPSHOT_ACTION,
+    ).order_by(AuditLog.id.desc()).first()
+
+
+def _resolve_manager_edit_snapshot(db: Session, schedule: Schedule, approved: bool) -> bool:
+    snapshot = _pending_manager_edit_snapshot(db, schedule.id)
+    if not snapshot:
+        return False
+    if approved:
+        snapshot.action = "manager_edit_approved"
+        return True
+
+    values = json.loads(snapshot.detail or "{}")
+    for field in SNAPSHOT_FIELDS:
+        if field not in values:
+            continue
+        value = values[field]
+        if field in SNAPSHOT_DATETIME_FIELDS and value is not None:
+            value = datetime.fromisoformat(value)
+        setattr(schedule, field, value)
+    db.query(ScheduleViewer).filter(ScheduleViewer.schedule_id == schedule.id).delete(
+        synchronize_session=False
+    )
+    for user_id in values.get("viewer_ids", []):
+        db.add(ScheduleViewer(schedule_id=schedule.id, user_id=user_id))
+    snapshot.action = "manager_edit_rejected"
+    return True
 
 
 def create_schedule(db: Session, data: ScheduleCreate, user_id: int, skip_review: bool = False) -> Schedule:
     """
     创建日程（录入者操作）
-    skip_review=True 时直接设为 confirmed（日程码管理者替他人创建、admin替人创建）
+    skip_review=True 时直接设为 confirmed（仅用于明确无需审核的内部流程）
     """
     # 如果指定了分类，使用分类的颜色
     event_color = data.color or "#3788d8"
@@ -27,8 +100,8 @@ def create_schedule(db: Session, data: ScheduleCreate, user_id: int, skip_review
     schedule = Schedule(
         title=data.title,
         description=data.description,
-        start_time=data.start_time,
-        end_time=data.end_time,
+        start_time=to_utc_naive(data.start_time),
+        end_time=to_utc_naive(data.end_time),
         is_all_day=data.is_all_day,
         is_important=data.is_important,
         status="confirmed" if skip_review else "pending",
@@ -116,9 +189,15 @@ def update_schedule(
     """
     更新日程
     edited_by_owner=True 时，修改后重置为 pending（仅创建者自己编辑时触发审核）
-    admin 和日程码管理者编辑时不重置状态（跳过审核）
+    日程状态是否需要重新审核由调用方的权限流程决定
     """
     update_data = data.model_dump(exclude_unset=True)
+
+    for field in ("start_time", "end_time"):
+        if field in update_data:
+            if update_data[field] is None:
+                raise ValueError(f"{field} cannot be empty")
+            update_data[field] = to_utc_naive(update_data[field])
 
     for field, value in update_data.items():
         setattr(schedule, field, value)
@@ -176,6 +255,7 @@ def approve_schedule(db: Session, schedule: Schedule, reviewer_id: int, comment:
     """
     审核通过：将日程状态改为 confirmed
     """
+    _resolve_manager_edit_snapshot(db, schedule, approved=True)
     schedule.status = "confirmed"
     schedule.requires_owner_review = False
     schedule.reviewed_by = reviewer_id
@@ -212,16 +292,25 @@ def reject_schedule(db: Session, schedule: Schedule, reviewer_id: int, comment: 
     """
     驳回日程：将日程状态改为 rejected
     """
-    schedule.status = "rejected"
-    schedule.requires_owner_review = False
-    schedule.reviewed_by = reviewer_id
-    schedule.reviewed_at = datetime.now(timezone.utc)
-    schedule.review_comment = comment
+    proposed_title = schedule.title
+    restored = _resolve_manager_edit_snapshot(db, schedule, approved=False)
+    if not restored:
+        schedule.status = "rejected"
+        schedule.requires_owner_review = False
+        schedule.reviewed_by = reviewer_id
+        schedule.reviewed_at = datetime.now(timezone.utc)
+        schedule.review_comment = comment
     schedule.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(schedule)
 
-    _log_action(db, schedule.id, "rejected", reviewer_id, f"驳回: {comment or '无备注'}")
+    _log_action(
+        db,
+        schedule.id,
+        "edit_rejected" if restored else "rejected",
+        reviewer_id,
+        f"驳回修改并恢复原日程: {comment or '无备注'}" if restored else f"驳回: {comment or '无备注'}",
+    )
 
     # 通知：通知录入者
     from ..services.notification_service import create_notification
@@ -234,7 +323,7 @@ def reject_schedule(db: Session, schedule: Schedule, reviewer_id: int, comment: 
                 db,
                 user_id=recipient_id,
                 title="❌ 日程未获确认",
-                content=f"日程「{schedule.title}」未获 {reviewer_name} 确认，理由：{comment or '无'}",
+                content=f"日程「{proposed_title}」未获 {reviewer_name} 确认，理由：{comment or '无'}",
                 type="schedule_rejected",
                 related_schedule_id=schedule.id,
             )
@@ -298,13 +387,8 @@ def get_external_contacts(db: Session, user_id: int | None = None, user_role: st
 
 
 def _dt_to_iso(dt) -> str | None:
-    """将 datetime 转为 ISO 字符串，确保标记为 UTC（+00:00）"""
-    if dt is None:
-        return None
-    # 如果 datetime 没有时区信息，追加 +00:00 表明存储的是 UTC 时间
-    if dt.tzinfo is None:
-        return dt.isoformat() + "+00:00"
-    return dt.isoformat()
+    """将数据库 UTC 时间统一输出为带 +08:00 标识的北京时间。"""
+    return to_beijing_iso(dt)
 
 
 def _schedule_to_response(schedule: Schedule) -> dict:
@@ -341,7 +425,7 @@ def _schedule_to_response(schedule: Schedule) -> dict:
     }
 
 
-def toggle_complete(db: Session, schedule: Schedule) -> Schedule:
+def toggle_complete(db: Session, schedule: Schedule, actor_id: int | None = None) -> Schedule:
     """切换日程的完成状态"""
     schedule.is_completed = not schedule.is_completed
     schedule.completed_at = datetime.now(timezone.utc) if schedule.is_completed else None
@@ -349,17 +433,17 @@ def toggle_complete(db: Session, schedule: Schedule) -> Schedule:
     db.commit()
     db.refresh(schedule)
     action = "completed" if schedule.is_completed else "uncompleted"
-    _log_action(db, schedule.id, action, schedule.created_by, f"标记为{'已完成' if schedule.is_completed else '未完成'}")
+    _log_action(db, schedule.id, action, actor_id or schedule.created_by, f"标记为{'已完成' if schedule.is_completed else '未完成'}")
     return schedule
 
 
-def update_completer(db: Session, schedule: Schedule, completer_name: str | None) -> Schedule:
+def update_completer(db: Session, schedule: Schedule, completer_name: str | None, actor_id: int | None = None) -> Schedule:
     """更新任务完成人（管理员操作）"""
     schedule.completer_name = completer_name
     schedule.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(schedule)
-    _log_action(db, schedule.id, "update_completer", schedule.created_by, f"完成人更新为: {completer_name or '无'}")
+    _log_action(db, schedule.id, "update_completer", actor_id or schedule.created_by, f"完成人更新为: {completer_name or '无'}")
     return schedule
 
 

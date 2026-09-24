@@ -16,6 +16,16 @@ class LoginRequest(BaseModel):
     password: str = Field(..., min_length=1, max_length=64, description="登录密码")
 
 
+class PasswordRecoveryVerifyRequest(BaseModel):
+    username: str = Field(..., min_length=1, max_length=50, description="登录账号")
+    nickname: str = Field(..., min_length=1, max_length=50, description="当前系统显示昵称")
+
+
+class PasswordRecoveryResetRequest(BaseModel):
+    recovery_token: str = Field(..., min_length=1, description="密码找回临时凭证")
+    new_password: str = Field(..., min_length=8, max_length=16, description="新密码")
+
+
 class UserInfo(BaseModel):
     id: int
     username: str | None = None

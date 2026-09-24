@@ -17,9 +17,7 @@ export async function uploadAttachment(scheduleId, file, description = '') {
   const formData = new FormData()
   formData.append('file', file)
   if (description) formData.append('description', description)
-  const res = await apiClient.post(`/schedules/${scheduleId}/attachments`, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  })
+  const res = await apiClient.post(`/schedules/${scheduleId}/attachments`, formData)
   return res.data
 }
 

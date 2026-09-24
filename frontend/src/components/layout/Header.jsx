@@ -5,7 +5,7 @@ import SearchBar from '../common/SearchBar'
 import NotificationBell from '../common/NotificationBell'
 import { deleteMyAccount } from '../../api/users'
 
-export default function Header() {
+export default function Header({ notificationCount, setNotificationCount }) {
   const { user, isAdmin, isReader, isWriter, logoutUser } = useAuth()
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -27,7 +27,7 @@ export default function Header() {
 
   const handleDeleteAccount = async () => {
     if (!window.confirm('确定要注销账号吗？此操作不可撤销，所有数据将被永久删除。')) return
-    if (!window.confirm('再次确认：注销后所有日程、聊天记录、日程码等数据将被清除。确定继续？')) return
+    if (!window.confirm('再次确认：注销后所有日程、聊天记录和个人资料等数据将被清除。确定继续？')) return
     setDeleting(true)
     try {
       await deleteMyAccount()
@@ -55,7 +55,7 @@ export default function Header() {
         <SearchBar />
       </div>
       <div className="header-right">
-        <NotificationBell />
+        <NotificationBell unreadCount={notificationCount} setUnreadCount={setNotificationCount} />
 
         {/* 右上角用户菜单 */}
         <div className="header-user-menu" ref={menuRef}>

@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import CalendarView from '../components/calendar/CalendarView'
 import Loading from '../components/common/Loading'
-import { getSchedules, getIcalExportUrl } from '../api/schedules'
+import { getSchedules, exportIcal } from '../api/schedules'
 import { getManagementFriends } from '../api/scheduleManagement'
-import { getToken } from '../api/client'
+import { getBeijingCurrentMonthRange } from '../utils/dateTime'
 
 const SWITCH_KEY = 'calendar_selected_user'
 
@@ -35,10 +35,10 @@ export default function CalendarPage() {
     }
   }, [selectedUserId])
 
-  // 获取日程码管理的用户
+  // 所有好友都可查看忙碌占位；只有已批准管理者可查看详情和代建日程。
   useEffect(() => {
     getManagementFriends().then((res) => {
-      setManagedUsers((res.data || []).filter(x => x.management?.status === 'approved').map(x => ({ ...x, owner_id: x.id })))
+      setManagedUsers((res.data || []).map(x => ({ ...x, owner_id: x.id })))
     }).catch(() => {})
   }, [])
 
@@ -68,30 +68,37 @@ export default function CalendarPage() {
   const handleDateClick = (dateStr) => {
     const params = new URLSearchParams()
     params.set('date', dateStr)
-    if (selectedUserId) params.set('for_user', String(selectedUserId))
+    if (selectedUserId) {
+      const selected = managedUsers.find(user => user.owner_id === selectedUserId)
+      if (selected?.management?.status !== 'approved') {
+        alert('你只能查看该好友的忙碌时间；获得日程管理权限后才能代为创建日程。')
+        return
+      }
+      params.set('for_user', String(selectedUserId))
+    }
     navigate(`/schedules/new?${params.toString()}`)
   }
 
-  const handleExport = () => {
-    const now = new Date()
-    const startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
-    const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
-
-    const token = getToken()
-    const url = getIcalExportUrl(startDate, endDate)
-
-    fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => res.blob())
-      .then((blob) => {
-        const a = document.createElement('a')
-        a.href = URL.createObjectURL(blob)
-        a.download = `schedules_${startDate}_${endDate}.ics`
-        a.click()
-        URL.revokeObjectURL(a.href)
-      })
-      .catch(() => alert('导出失败'))
+  const handleExport = async () => {
+    const { startDate, endDate } = getBeijingCurrentMonthRange()
+    const selected = selectedUserId ? managedUsers.find(user => user.owner_id === selectedUserId) : null
+    if (selectedUserId && selected?.management?.status !== 'approved') {
+      alert('没有该好友日程的有效管理权限，无法导出。')
+      return
+    }
+    try {
+      const blob = await exportIcal(startDate, endDate, selectedUserId)
+      const objectUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = objectUrl
+      a.download = `schedules_${startDate}_${endDate}.ics`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
+    } catch (error) {
+      alert(error.response?.status === 403 ? '没有该好友日程的有效管理权限，无法导出。' : (error.userMessage || '导出失败'))
+    }
   }
 
   const selectedLabel = selectedUserId
@@ -110,11 +117,11 @@ export default function CalendarPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <h2>📆 日历视图</h2>
           <div className="managed-picker" style={{ position: 'relative' }}>
-              <span className="managed-picker-label">管理对象</span>
+              <span className="managed-picker-label">日历对象</span>
               <input
                 className="search-input managed-search-input"
-                aria-label="搜索可管理用户"
-                placeholder="输入姓名或用户名搜索可管理用户"
+                aria-label="搜索好友日历"
+                placeholder="输入姓名或用户名搜索好友"
                 value={managedSearch}
                 onChange={(e) => { setManagedSearch(e.target.value); setShowManagedDropdown(true) }}
                 onFocus={() => setShowManagedDropdown(true)}
@@ -136,7 +143,7 @@ export default function CalendarPage() {
                   {filteredManagedUsers.map(u => (
                     <div key={u.owner_id} className={`managed-dropdown-item ${selectedUserId === u.owner_id ? 'active' : ''}`}
                       onMouseDown={(e) => { e.preventDefault(); setSelectedUserId(u.owner_id); setManagedSearch(''); setShowManagedDropdown(false) }}>
-                      <span>🔗</span> {u.nickname} 的日程
+                      <span>{u.management?.status === 'approved' ? '🔗' : '👤'}</span> {u.nickname} 的日程 {u.management?.status === 'approved' ? '（可管理）' : '（仅忙碌）'}
                     </div>
                   ))}
                   {filteredManagedUsers.length === 0 && managedSearch && (

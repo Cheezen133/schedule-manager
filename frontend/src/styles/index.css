@@ -644,6 +644,30 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
   margin-top: 0.25rem;
 }
 
+/* ===== 好友与群聊联系人 ===== */
+.chat-contacts-page { display: grid; gap: 1rem; }
+.chat-contacts-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.chat-contacts-header h2 { margin: .15rem 0 .25rem; }
+.chat-contacts-header p { color: var(--gray-500); font-size: .88rem; }
+.chat-contact-toolbar { display: grid; grid-template-columns: minmax(240px, 1fr) auto; align-items: center; gap: 1rem; padding: .8rem; background: white; border: 1px solid var(--gray-200); border-radius: var(--radius); box-shadow: var(--shadow); }
+.chat-contact-tabs { display: flex; gap: .35rem; }
+.chat-contact-tabs button { min-height: 36px; padding: .4rem .7rem; border-color: transparent; background: var(--gray-50); color: var(--gray-600); }
+.chat-contact-tabs button.active { border-color: #c4b5fd; background: #f5f3ff; color: var(--primary); }
+.chat-contact-tabs b { margin-left: .2rem; font-size: .72rem; }
+.chat-contact-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: .75rem; }
+.chat-contact-card { position: relative; display: grid; grid-template-columns: 44px minmax(0, 1fr); align-items: center; gap: .75rem; min-height: 92px; padding: .9rem; border: 1px solid var(--gray-200); border-radius: var(--radius); background: white; text-align: left; box-shadow: var(--shadow); transition: border-color .15s ease, transform .15s ease, box-shadow .15s ease; }
+.chat-contact-card:hover { border-color: #c4b5fd; transform: translateY(-1px); box-shadow: var(--shadow-md); }
+.chat-contact-avatar { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: #e0e7ff; color: var(--primary); font-size: 1rem; font-weight: 700; }
+.chat-contact-avatar.group { border-radius: 12px; background: #ede9fe; color: #6d28d9; }
+.chat-contact-copy { display: grid; min-width: 0; gap: .18rem; padding-right: 4.4rem; }
+.chat-contact-copy strong, .chat-contact-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-contact-copy strong { color: var(--gray-800); font-size: .92rem; }
+.chat-contact-copy small { color: var(--gray-500); font-size: .76rem; }
+.chat-contact-enter { position: absolute; right: .8rem; bottom: .7rem; color: var(--primary); font-size: .74rem; font-weight: 600; }
+.chat-contact-unread { position: absolute; top: .65rem; right: .7rem; padding: .12rem .38rem; border-radius: 999px; background: #fee2e2; color: #b91c1c; font-size: .66rem; font-weight: 700; }
+.chat-contact-empty { grid-column: 1 / -1; padding: 4rem 1rem; border: 1px dashed var(--gray-300); border-radius: var(--radius); color: var(--gray-500); background: var(--gray-50); text-align: center; }
+@media (max-width: 680px) { .chat-contact-toolbar { grid-template-columns: 1fr; }.chat-contact-tabs { overflow-x: auto; }.chat-contact-tabs button { flex: 1; white-space: nowrap; }.chat-contacts-header { align-items: center; } }
+
 /* ===== 审核页面 ===== */
 .review-page h2 {
   margin-bottom: 1.5rem;
@@ -1532,7 +1556,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
   margin-top: 0.25rem;
 }
 
-/* ===== 日程码页面 ===== */
+/* ===== 历史管理页面通用样式（保留供现有卡片复用） ===== */
 .page-desc {
   font-size: 0.875rem;
   color: var(--gray-500);
@@ -2530,8 +2554,21 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
 .management-center { grid-column: 1 / -1; }.management-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }.management-heading h3 { margin-top: .15rem; }.management-heading p { color: var(--gray-500); font-size: .84rem; }.management-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .8rem; }.permission-column { min-height: 135px; padding: .85rem; background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: 9px; }.permission-column h4 { margin-bottom: .6rem; font-size: .9rem; }.permission-row { display: flex; justify-content: space-between; gap: .5rem; align-items: center; padding: .55rem 0; border-top: 1px solid var(--gray-200); }.permission-row > div:first-child { display: grid; min-width: 0; }.permission-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .85rem; }.permission-row small { color: var(--gray-500); font-size: .72rem; }.permission-actions { display: flex; gap: .15rem; flex-shrink: 0; }.permission-actions .ui-button { font-size: .76rem; }.schedule-visibility-picker { padding: .9rem; background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: 9px; }.schedule-visibility-picker > p { margin: .25rem 0 .65rem; color: var(--gray-500); font-size: .8rem; }.visibility-options { display: grid; gap: .45rem; }.visibility-options label, .viewer-selector-list label { display: flex; align-items: center; gap: .45rem; font-size: .87rem; color: var(--gray-700); }.viewer-selector { display: grid; gap: .55rem; margin-top: .7rem; }.viewer-selector-list { display: grid; gap: .45rem; max-height: 155px; overflow-y: auto; padding: .65rem; background: white; border: 1px solid var(--gray-200); border-radius: 7px; }.viewer-selector-list > span { color: var(--gray-500); font-size: .82rem; }
 .management-shortcuts { display: grid; gap: .55rem; margin: -.2rem 0 1rem; }.management-shortcut { display: flex; align-items: center; justify-content: space-between; gap: .8rem; padding: .7rem .8rem; border: 1px solid #ddd6fe; border-radius: 9px; background: #fafaff; }.management-shortcut > div:first-child { display: grid; gap: .12rem; min-width: 0; }.management-shortcut small { color: var(--gray-500); font-size: .76rem; }.management-shortcut > div:last-child { display: flex; flex-wrap: wrap; gap: .35rem; }.management-shortcut .ui-button { min-height: 32px; padding: .3rem .55rem; font-size: .76rem; text-decoration: none; }
 .schedule-visibility-picker { display: grid; gap: .6rem; }.schedule-visibility-picker > label { margin: 0; }.schedule-visibility-picker > p { margin: -.3rem 0 .1rem; }.visibility-options { gap: .55rem; }.visibility-option { display: grid !important; grid-template-columns: 20px minmax(0, 1fr); align-items: start !important; column-gap: .65rem !important; min-height: 64px; padding: .7rem .75rem; border: 1px solid var(--gray-200); border-radius: 8px; background: white; cursor: pointer; transition: border-color .15s ease, background .15s ease, box-shadow .15s ease; }.visibility-option:hover { border-color: #c4b5fd; background: #fafaff; }.visibility-option.selected { border-color: var(--primary); background: #f7f5ff; box-shadow: 0 0 0 2px rgba(79, 70, 229, .09); }.visibility-option-input { width: 16px; height: 16px; margin: .12rem 0 0 !important; accent-color: var(--primary); cursor: pointer; }.visibility-option-copy { display: grid; gap: .18rem; min-width: 0; }.visibility-option-copy strong { color: var(--gray-800); font-size: .88rem; font-weight: 600; line-height: 1.3; }.visibility-option-copy small { color: var(--gray-500); font-size: .77rem; line-height: 1.4; }.viewer-selector { gap: .5rem; margin-top: .15rem; padding: .75rem; border: 1px solid #ddd6fe; border-radius: 8px; background: #fafaff; }.viewer-search-label { display: grid; gap: .35rem; color: var(--gray-700); font-size: .82rem; font-weight: 600; }.viewer-search-label input { width: 100%; min-height: 38px; }.viewer-selector-list { gap: .2rem; padding: .4rem; }.viewer-selector-list label { min-height: 34px; padding: .35rem .45rem; border-radius: 6px; cursor: pointer; }.viewer-selector-list label:hover { background: #f5f3ff; }.viewer-selector-list input { flex: 0 0 auto; margin: 0; accent-color: var(--primary); }.viewer-selector-list span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shared-text-content { white-space: pre-wrap; word-break: break-word; color: var(--gray-800); }
+.schedule-category-field { display: grid; gap: .35rem; }.schedule-category-heading { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }.schedule-category-heading label { margin: 0; }.schedule-category-field > small { color: var(--gray-500); font-size: .76rem; }.category-manager-modal { width: min(620px, calc(100vw - 2rem)); max-height: min(720px, calc(100vh - 2rem)); overflow: hidden; }.category-owner-hint { margin: -.25rem 0 .85rem; padding: .55rem .65rem; color: var(--primary); background: #eef2ff; border-radius: 7px; font-size: .8rem; }.category-manager-form { display: grid; grid-template-columns: minmax(0, 2fr) minmax(90px, .8fr) 80px; gap: .7rem; padding-bottom: .9rem; border-bottom: 1px solid var(--gray-200); }.category-manager-form label { display: grid; gap: .3rem; color: var(--gray-600); font-size: .8rem; font-weight: 600; }.category-manager-form .wide { grid-column: 1 / -1; }.category-manager-form input[type="color"] { width: 100%; min-height: 40px; padding: .2rem; }.category-manager-list { display: grid; gap: .45rem; margin-top: .8rem; overflow-y: auto; }.category-manager-list article { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: .7rem; min-height: 58px; padding: .55rem .65rem; border: 1px solid var(--gray-200); border-left: 4px solid var(--category-color); border-radius: 8px; }.category-manager-icon { display: grid; place-items: center; width: 36px; height: 36px; background: var(--gray-50); border-radius: 7px; }.category-manager-list article > div:nth-child(2) { display: grid; min-width: 0; }.category-manager-list article small { overflow: hidden; color: var(--gray-500); font-size: .74rem; text-overflow: ellipsis; white-space: nowrap; }.category-manager-actions { display: flex; gap: .3rem; }.category-manager-actions .ui-button { min-height: 32px; padding: .3rem .55rem; font-size: .76rem; }
 @media (max-width: 980px) { .management-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } } @media (max-width: 600px) { .management-grid { grid-template-columns: 1fr; }.management-heading { display: grid; }.management-shortcut { align-items: flex-start; flex-direction: column; } }
+@media (max-width: 600px) { .category-manager-form { grid-template-columns: 1fr 1fr; }.category-manager-form .wide, .category-manager-form label:first-child { grid-column: 1 / -1; }.category-manager-list article { grid-template-columns: 34px minmax(0, 1fr); }.category-manager-actions { grid-column: 1 / -1; justify-content: flex-end; } }
 
 /* ===== 移动端布局与长按上下文菜单 ===== */
 .chat-media-loading, .chat-media-error { display: grid; place-items: center; min-width: 150px; min-height: 92px; padding: .75rem; border: 1px dashed var(--gray-300); border-radius: 9px; color: var(--gray-500); background: var(--gray-50); font-size: .82rem; }.chat-media-error { color: var(--danger); border-color: #fecaca; background: #fff7f7; }.chat-msg, .patient-card, .group-member-row, .group-record-list article { -webkit-touch-callout: none; }
 .chat-msg-recalled { min-width: 175px; padding: .7rem .85rem; border: 1px dashed var(--gray-300); border-radius: 9px; color: var(--gray-500); background: var(--gray-50); font-size: .82rem; font-style: italic; text-align: center; }
+.group-expand-button { justify-self: center; margin: .15rem 0; }.context-menu-item.disabled { color: var(--gray-400); cursor: default; pointer-events: none; }.group-member-row { cursor: pointer; }.group-member-row:hover { background: var(--gray-50); }
+.info-message {
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.875rem;
+}

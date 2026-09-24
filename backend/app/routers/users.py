@@ -17,6 +17,7 @@ from ..models.message import Message
 from ..models.attachment import Attachment
 from ..models.conversation import Conversation
 from ..schemas.auth import UserInfo
+from ..utils.datetime_utils import to_beijing_iso
 
 router = APIRouter(prefix="/api/v1", tags=["用户管理"])
 
@@ -36,8 +37,8 @@ def _user_to_dict(u: User) -> dict:
         "nickname": u.nickname,
         "role": u.role,
         "is_active": u.is_active,
-        "created_at": u.created_at.isoformat() if u.created_at else None,
-        "updated_at": u.updated_at.isoformat() if u.updated_at else None,
+        "created_at": to_beijing_iso(u.created_at),
+        "updated_at": to_beijing_iso(u.updated_at),
     }
 
 

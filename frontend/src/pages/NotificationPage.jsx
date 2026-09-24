@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getNotifications, markNotificationRead, markAllNotificationsRead, deleteNotification } from '../api/notifications'
 import Loading from '../components/common/Loading'
+import { formatRelativeTime } from '../utils/dateTime'
 
 export default function NotificationPage() {
   const [notifications, setNotifications] = useState([])
@@ -18,7 +19,7 @@ export default function NotificationPage() {
 
   useEffect(() => {
     fetchData()
-    const timer = setInterval(fetchData, 10000)
+    const timer = setInterval(() => { if (document.visibilityState === 'visible') fetchData() }, 30000)
     return () => clearInterval(timer)
   }, [])
 
@@ -77,16 +78,6 @@ export default function NotificationPage() {
     return map[type] || '🔔'
   }
 
-  const timeAgo = (dateStr) => {
-    const diff = Date.now() - new Date(dateStr).getTime()
-    const mins = Math.floor(diff / 60000)
-    if (mins < 1) return '刚刚'
-    if (mins < 60) return `${mins}分钟前`
-    const hours = Math.floor(mins / 60)
-    if (hours < 24) return `${hours}小时前`
-    return `${Math.floor(hours / 24)}天前`
-  }
-
   const unreadCount = notifications.filter(n => !n.is_read).length
 
   if (loading) return <Loading />
@@ -115,7 +106,7 @@ export default function NotificationPage() {
               <div className="notification-body">
                 <div className="notification-title">{n.title}</div>
                 <div className="notification-text">{n.content}</div>
-                <div className="notification-time">{timeAgo(n.created_at)}</div>
+                <div className="notification-time">{formatRelativeTime(n.created_at)}</div>
               </div>
               {!n.is_read && <div className="notification-dot"></div>}
               <div className="notification-actions">

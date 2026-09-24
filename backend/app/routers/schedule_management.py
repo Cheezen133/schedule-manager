@@ -9,6 +9,7 @@ from ..models.friend_request import FriendRequest
 from ..models.schedule_management import ScheduleManagementPermission
 from ..services.schedule_management_service import active_permission, is_friend, now
 from ..services.notification_service import create_notification
+from ..utils.datetime_utils import to_beijing_iso
 
 router = APIRouter(prefix="/api/v1/schedule-management", tags=["Schedule management"])
 
@@ -23,7 +24,7 @@ def _as_utc(value):
 def payload(p):
     expires_at = _as_utc(p.expires_at)
     remaining = max(0, int((expires_at - now()).total_seconds())) if p.status == "approved" and expires_at else None
-    return {"id": p.id, "owner_id": p.owner_id, "requester_id": p.requester_id, "owner_name": p.owner.nickname if p.owner else None, "requester_name": p.requester.nickname if p.requester else None, "status": "expired" if remaining == 0 and p.status == "approved" else p.status, "requested_at": p.requested_at, "expires_at": p.expires_at, "remaining_seconds": remaining}
+    return {"id": p.id, "owner_id": p.owner_id, "requester_id": p.requester_id, "owner_name": p.owner.nickname if p.owner else None, "requester_name": p.requester.nickname if p.requester else None, "status": "expired" if remaining == 0 and p.status == "approved" else p.status, "requested_at": to_beijing_iso(p.requested_at), "expires_at": to_beijing_iso(p.expires_at), "remaining_seconds": remaining}
 
 
 def notify_safely(db: Session, *args, **kwargs):

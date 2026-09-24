@@ -1,13 +1,12 @@
-"""
-分类服务：管理员管理分类规则
-"""
+"""个人日程分类服务。"""
 from sqlalchemy.orm import Session
+from ..utils.datetime_utils import to_beijing_iso
 from ..models.category import Category
 from ..schemas.category import CategoryCreate, CategoryUpdate
 
 
 def create_category(db: Session, data: CategoryCreate, user_id: int) -> Category:
-    """创建分类"""
+    """为指定日程拥有者创建个人分类。"""
     cat = Category(
         name=data.name,
         description=data.description,
@@ -22,9 +21,9 @@ def create_category(db: Session, data: CategoryCreate, user_id: int) -> Category
     return cat
 
 
-def get_categories(db: Session, include_inactive: bool = False) -> list[Category]:
-    """获取分类列表"""
-    q = db.query(Category)
+def get_categories(db: Session, owner_id: int, include_inactive: bool = False) -> list[Category]:
+    """获取指定日程拥有者的个人分类列表。"""
+    q = db.query(Category).filter(Category.created_by == owner_id)
     if not include_inactive:
         q = q.filter(Category.is_active == True)
     return q.order_by(Category.sort_order.asc(), Category.id.asc()).all()
@@ -45,11 +44,11 @@ def update_category(db: Session, cat: Category, data: CategoryUpdate) -> Categor
 
 
 def delete_category(db: Session, cat: Category):
-    """删除分类（仅当没有日程关联时）"""
+    """删除分类；原有日程保留并转为未分类。"""
     from ..models.schedule import Schedule
-    count = db.query(Schedule).filter(Schedule.category_id == cat.id).count()
-    if count > 0:
-        raise ValueError(f"该分类下有 {count} 个日程，无法删除")
+    db.query(Schedule).filter(Schedule.category_id == cat.id).update(
+        {"category_id": None}, synchronize_session=False
+    )
     db.delete(cat)
     db.commit()
 
@@ -64,6 +63,7 @@ def _category_to_response(cat: Category) -> dict:
         "is_active": cat.is_active,
         "sort_order": cat.sort_order,
         "created_by": cat.created_by,
-        "created_at": cat.created_at.isoformat() if cat.created_at else None,
-        "updated_at": cat.updated_at.isoformat() if cat.updated_at else None,
+        "owner_id": cat.created_by,
+        "created_at": to_beijing_iso(cat.created_at),
+        "updated_at": to_beijing_iso(cat.updated_at),
     }

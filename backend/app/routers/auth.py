@@ -5,8 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..schemas.auth import RegisterRequest, LoginRequest, LoginResponse, UserInfo
-from ..services.auth_service import register_user, login_user, validate_password_strength
+from ..schemas.auth import RegisterRequest, LoginRequest, LoginResponse, UserInfo, PasswordRecoveryVerifyRequest, PasswordRecoveryResetRequest
+from ..services.auth_service import register_user, login_user, validate_password_strength, verify_password_recovery_identity, reset_password
+from ..utils.security import decode_password_recovery_token
 from ..dependencies import get_current_user
 from ..models.user import User
 
@@ -62,6 +63,32 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
             is_active=user.is_active,
         ),
     )
+
+
+@router.post("/password-recovery/verify", summary="验证密码找回身份")
+async def verify_password_recovery(body: PasswordRecoveryVerifyRequest, db: Session = Depends(get_db)):
+    token = verify_password_recovery_identity(db, body.username, body.nickname)
+    if token is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="用户名或显示昵称不正确")
+    return {
+        "code": 0,
+        "message": "身份验证成功",
+        "data": {"recovery_token": token, "expires_in": 600},
+    }
+
+
+@router.post("/password-recovery/reset", summary="重置账号密码")
+async def recover_password(body: PasswordRecoveryResetRequest, db: Session = Depends(get_db)):
+    password_error = validate_password_strength(body.new_password)
+    if password_error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=password_error)
+    try:
+        user_id = decode_password_recovery_token(body.recovery_token)
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="找回凭证无效或已过期，请重新验证")
+    if not reset_password(db, user_id, body.new_password):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="找回凭证无效或账号已被禁用")
+    return {"code": 0, "message": "密码重置成功，请使用新密码登录", "data": None}
 
 
 @router.get("/me", response_model=UserInfo, summary="获取当前用户信息")

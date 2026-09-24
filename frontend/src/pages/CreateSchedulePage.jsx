@@ -3,14 +3,17 @@ import { useState, useEffect } from 'react'
 import ScheduleForm from '../components/schedule/ScheduleForm'
 import { createSchedule } from '../api/schedules'
 import { getManagementFriends } from '../api/scheduleManagement'
+import { useAuth } from '../contexts/AuthContext'
 
 export default function CreateSchedulePage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const prefilledDate = searchParams.get('date')
   const prefilledTitle = searchParams.get('title')
   const forUserParam = searchParams.get('for_user')
   const [managedUsers, setManagedUsers] = useState([])
+  const [permissionsLoaded, setPermissionsLoaded] = useState(false)
   const [forUserId, setForUserId] = useState(forUserParam ? parseInt(forUserParam) : null)
   const [managedSearch, setManagedSearch] = useState('')
   const [showManagedDropdown, setShowManagedDropdown] = useState(false)
@@ -19,10 +22,12 @@ export default function CreateSchedulePage() {
   useEffect(() => {
     getManagementFriends().then((res) => {
       setManagedUsers((res.data || []).filter(x => x.management?.status === 'approved').map(x => ({ ...x, owner_id: x.id })))
-    }).catch(() => {})
+    }).catch(() => {}).finally(() => setPermissionsLoaded(true))
   }, [])
 
   const managedUser = managedUsers.find(u => u.owner_id === forUserId)
+  const readerNeedsManagedOwner = user?.role === 'reader'
+  const canShowForm = !readerNeedsManagedOwner || Boolean(managedUser)
 
   const initialData = (prefilledDate || prefilledTitle)
     ? {
@@ -46,7 +51,7 @@ export default function CreateSchedulePage() {
 
   return (
     <div>
-      {/* 日程码管理用户选择器 */}
+      {/* 有效日程管理权限的用户选择器 */}
       <div className="for-user-selector" style={{ position: 'relative' }}>
           <label>👤 创建对象</label>
           <input
@@ -67,10 +72,10 @@ export default function CreateSchedulePage() {
           {showManagedDropdown && (
             <div className="managed-dropdown" style={{ top: '100%', left: 80 }}>
               <div className="managed-dropdown-heading">选择创建对象</div>
-              <div className={`managed-dropdown-item ${!forUserId ? 'active' : ''}`}
+              {!readerNeedsManagedOwner && <div className={`managed-dropdown-item ${!forUserId ? 'active' : ''}`}
                 onMouseDown={(e) => { e.preventDefault(); setForUserId(null); setManagedSearch(''); setShowManagedDropdown(false) }}>
                 <span>📋</span> 自己
-              </div>
+              </div>}
               {filteredManagedUsers.map(u => (
                 <div key={u.owner_id} className={`managed-dropdown-item ${forUserId === u.owner_id ? 'active' : ''}`}
                   onMouseDown={(e) => { e.preventDefault(); setForUserId(u.owner_id); setManagedSearch(''); setShowManagedDropdown(false) }}>
@@ -87,18 +92,23 @@ export default function CreateSchedulePage() {
       {managedUser && (
         <div className="for-user-banner">
           📝 正在为 <strong>{managedUser.nickname}</strong> 创建日程
-          <button className="btn-cancel-sm" onClick={() => setForUserId(null)} style={{ marginLeft: '1rem' }}>
+          {!readerNeedsManagedOwner && <button className="btn-cancel-sm" onClick={() => setForUserId(null)} style={{ marginLeft: '1rem' }}>
             取消
-          </button>
+          </button>}
         </div>
       )}
 
-      <ScheduleForm
+      {permissionsLoaded && readerNeedsManagedOwner && !managedUser && (
+        <div className="empty-state">请选择一位已授权你管理日程的好友；当前不能为自己新建日程。</div>
+      )}
+
+      {canShowForm && <ScheduleForm
         initialData={initialData}
         ownerId={forUserId}
+        ownerName={managedUser?.nickname || null}
         onSubmit={handleSubmit}
         isEditing={false}
-      />
+      />}
     </div>
   )
 }

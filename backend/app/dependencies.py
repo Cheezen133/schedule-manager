@@ -36,7 +36,7 @@ def get_current_user(
         )
 
     user_id = payload.get("sub")
-    if user_id is None:
+    if user_id is None or payload.get("token_type", "access") != "access":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="无效的登录凭证",

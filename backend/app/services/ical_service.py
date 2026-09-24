@@ -4,6 +4,7 @@ iCal (RFC 5545) 导出服务
 from datetime import datetime, timedelta, timezone
 from icalendar import Calendar, Event
 from ..models.schedule import Schedule
+from ..utils.datetime_utils import stored_utc_to_beijing
 
 
 def generate_ical(schedules: list[Schedule]) -> bytes:
@@ -59,7 +60,8 @@ def generate_ical(schedules: list[Schedule]) -> bytes:
 
 
 def _to_ical_datetime(dt, is_all_day: bool):
-    """将 datetime 转为 iCal 格式"""
+    """将数据库 UTC 时间转换为带 Asia/Shanghai 时区的 iCal 时间。"""
+    dt = stored_utc_to_beijing(dt)
     if is_all_day:
         return dt.date()
     return dt

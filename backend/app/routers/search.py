@@ -11,6 +11,7 @@ from ..dependencies import get_current_user
 from ..models.user import User
 from ..models.schedule import Schedule
 from ..services.schedule_service import _schedule_to_response
+from ..services.schedule_management_service import can_view_schedule
 
 router = APIRouter(prefix="/api/v1", tags=["搜索"])
 
@@ -38,18 +39,10 @@ async def search_schedules(
         )
     )
 
-    # 非管理员只看自己创建的
-    if current_user.role != "admin":
-        query = query.filter(Schedule.created_by == current_user.id)
-
-    total = query.count()
-    schedules = (
-        query
-        .order_by(Schedule.is_important.desc(), Schedule.start_time.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
+    candidates = query.order_by(Schedule.is_important.desc(), Schedule.start_time.desc()).all()
+    visible = [item for item in candidates if can_view_schedule(db, item, current_user.id)]
+    total = len(visible)
+    schedules = visible[(page - 1) * page_size: page * page_size]
 
     return {
         "code": 0,

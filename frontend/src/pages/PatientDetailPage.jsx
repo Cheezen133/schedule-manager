@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import api from '../api/client'
+import { beijingInputToUtcIso, beijingNowInputValue, dateOnlyToNaiveIso, formatBeijingDateTime, toBeijingInputValue } from '../utils/dateTime'
 import { BackButton } from '../components/memo/MemoNav'
 
 const RECORD_TYPES = [
   ['visit', '就诊'], ['diagnosis', '诊断'], ['treatment', '治疗'],
   ['examination', '检查'], ['followup', '随访'], ['condition', '一般情况'],
 ]
-const blankEntry = () => ({ record_type: 'visit', occurred_at: new Date().toISOString().slice(0, 16), title: '', content: '' })
+const blankEntry = () => ({ record_type: 'visit', occurred_at: beijingNowInputValue(), title: '', content: '' })
 
 const patientFormData = patient => ({
   ...patient,
@@ -50,7 +51,7 @@ export default function PatientDetailPage() {
   const saveEntry = async event => {
     event.preventDefault()
     try {
-      const body = { ...entryForm, occurred_at: new Date(entryForm.occurred_at).toISOString() }
+      const body = { ...entryForm, occurred_at: beijingInputToUtcIso(entryForm.occurred_at) }
       if (entryForm.id) await api.put(`/memos/patients/${patientId}/timeline/${entryForm.id}`, body)
       else await api.post(`/memos/patients/${patientId}/timeline`, body)
       setEntryForm(null)
@@ -65,7 +66,7 @@ export default function PatientDetailPage() {
     try {
       await api.put(`/memos/patients/${patientId}`, {
         ...editForm,
-        birth_date: editForm.birth_date ? new Date(editForm.birth_date).toISOString() : null,
+        birth_date: dateOnlyToNaiveIso(editForm.birth_date),
       })
       setEditForm(null)
       load()
@@ -134,11 +135,11 @@ export default function PatientDetailPage() {
     </form>
     <div className="timeline">
       {entries.map(entry => <article className="timeline-item" key={entry.id}>
-        <time>{entry.occurred_at.slice(0, 16).replace('T', ' ')}</time>
+        <time>{formatBeijingDateTime(entry.occurred_at)}</time>
         <div>
           <span className={`timeline-type ${entry.record_type}`}>{RECORD_TYPES.find(([value]) => value === entry.record_type)?.[1] || entry.record_type}</span>
           <h4>{entry.title}</h4><p>{entry.content || '无详细说明'}</p>
-          <button className="text-button" onClick={() => setEntryForm({ ...entry, occurred_at: entry.occurred_at.slice(0, 16) })}>编辑</button>
+          <button className="text-button" onClick={() => setEntryForm({ ...entry, occurred_at: toBeijingInputValue(entry.occurred_at) })}>编辑</button>
           <button className="text-button danger" onClick={() => setConfirmAction({ type: 'delete-entry', entry })}>删除</button>
         </div>
       </article>)}
@@ -148,7 +149,7 @@ export default function PatientDetailPage() {
     {entryForm && <div className="modal-overlay"><form className="modal patient-form" onSubmit={saveEntry}>
       <div className="modal-header"><h3>{entryForm.id ? '编辑记录' : '添加病例记录'}</h3><button type="button" className="text-button" onClick={() => setEntryForm(null)}>关闭</button></div>
       <select value={entryForm.record_type} onChange={event => setEntryForm({ ...entryForm, record_type: event.target.value })}>{RECORD_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-      <label>发生时间<input type="datetime-local" required value={entryForm.occurred_at} onChange={event => setEntryForm({ ...entryForm, occurred_at: event.target.value })} /></label>
+      <label>发生时间（北京时间）<input type="datetime-local" required value={entryForm.occurred_at} onChange={event => setEntryForm({ ...entryForm, occurred_at: event.target.value })} /></label>
       <input required placeholder="记录标题 *" value={entryForm.title} onChange={event => setEntryForm({ ...entryForm, title: event.target.value })} />
       <textarea placeholder="情况与详情" value={entryForm.content || ''} onChange={event => setEntryForm({ ...entryForm, content: event.target.value })} />
       <button className="btn-primary">保存记录</button>

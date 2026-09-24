@@ -15,6 +15,8 @@ from ..models.attachment import Attachment
 from ..models.schedule import Schedule
 from sqlalchemy import and_
 from ..services.schedule_permission_service import require_schedule_access
+from ..services.schedule_management_service import can_view_schedule
+from ..utils.datetime_utils import to_beijing_iso
 
 router = APIRouter(prefix="/api/v1", tags=["附件管理"])
 
@@ -38,7 +40,7 @@ def _attachment_to_response(att: Attachment) -> dict:
         "description": att.description,
         "uploaded_by": att.uploaded_by,
         "uploader_name": att.uploader.nickname if att.uploader else None,
-        "created_at": att.created_at.isoformat() if att.created_at else None,
+        "created_at": to_beijing_iso(att.created_at),
         "download_url": f"/api/v1/attachments/{att.id}/download",
     }
 
@@ -131,6 +133,7 @@ async def list_attachments(
             .order_by(Attachment.created_at.desc())
             .all()
         )
+        attachments = [item for item in attachments if can_view_schedule(db, item.schedule, current_user.id)]
     else:
         attachments = (
             db.query(Attachment)

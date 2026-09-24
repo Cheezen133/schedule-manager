@@ -1,8 +1,12 @@
 import { useState, useEffect } from 'react'
-import { getCategories } from '../../api/categories'
+import { getCategories, createCategory, updateCategory, deleteCategory } from '../../api/categories'
 import VoiceInputButton from '../common/VoiceInputButton'
 import { useAuth } from '../../contexts/AuthContext'
 import { getOwnerManagers } from '../../api/scheduleManagement'
+import { Button, ConfirmDialog } from '../common/Ui'
+import { beijingInputToUtcIso, toBeijingInputValue } from '../../utils/dateTime'
+
+const emptyCategoryForm = { name: '', description: '', color: '#3788d8', icon: '📋', sort_order: 0 }
 
 /**
  * 日程表单组件（创建/编辑通用）
@@ -10,8 +14,8 @@ import { getOwnerManagers } from '../../api/scheduleManagement'
  * @param {function} onSubmit - 提交回调 (formData) => Promise
  * @param {boolean} isEditing - 是否编辑模式
  */
-export default function ScheduleForm({ initialData, onSubmit, isEditing = false, ownerId = null }) {
-  useAuth()
+export default function ScheduleForm({ initialData, onSubmit, isEditing = false, ownerId = null, ownerName = null }) {
+  const { user } = useAuth()
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -32,27 +36,21 @@ export default function ScheduleForm({ initialData, onSubmit, isEditing = false,
   const [error, setError] = useState('')
   const [eligibleManagers, setEligibleManagers] = useState([])
   const [viewerSearch, setViewerSearch] = useState('')
-
-  // 加载分类列表
-  useEffect(() => {
-    getCategories().then((res) => setCategories(res.data || [])).catch(() => {})
-  }, [])
+  const [viewerNotice, setViewerNotice] = useState('')
+  const [categoryManagerOpen, setCategoryManagerOpen] = useState(false)
+  const [categoryForm, setCategoryForm] = useState(emptyCategoryForm)
+  const [editingCategoryId, setEditingCategoryId] = useState(null)
+  const [categorySaving, setCategorySaving] = useState(false)
+  const [categoryError, setCategoryError] = useState('')
+  const [pendingCategoryDelete, setPendingCategoryDelete] = useState(null)
 
   useEffect(() => {
     if (initialData) {
-      // 把后端返回的 UTC 时间转为本地时间显示在 datetime-local 输入框中
-      const toLocalDatetime = (dt) => {
-        if (!dt) return ''
-        const d = new Date(dt)
-        if (isNaN(d.getTime())) return dt.substring(0, 16)
-        const pad = (n) => String(n).padStart(2, '0')
-        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-      }
       setFormData({
         title: initialData.title || '',
         description: initialData.description || '',
-        start_time: toLocalDatetime(initialData.start_time),
-        end_time: toLocalDatetime(initialData.end_time),
+        start_time: toBeijingInputValue(initialData.start_time),
+        end_time: toBeijingInputValue(initialData.end_time),
         is_all_day: initialData.is_all_day || false,
         is_important: initialData.is_important || false,
         category_id: initialData.category_id ? String(initialData.category_id) : '',
@@ -66,11 +64,93 @@ export default function ScheduleForm({ initialData, onSubmit, isEditing = false,
     }
   }, [initialData])
 
-  const scheduleOwnerId = initialData?.created_by || ownerId
+  const scheduleOwnerId = initialData?.created_by || ownerId || user?.id
+  const scheduleOwnerLabel = initialData?.creator_name || ownerName || '我'
+
+  const loadCategories = async () => {
+    if (!scheduleOwnerId) return
+    try {
+      const response = await getCategories(false, scheduleOwnerId)
+      const items = response.data || []
+      setCategories(items)
+      setFormData(previous => previous.category_id && !items.some(item => String(item.id) === String(previous.category_id))
+        ? { ...previous, category_id: '' }
+        : previous)
+      setCategoryError('')
+    } catch (requestError) {
+      setCategories([])
+      setCategoryError(requestError.userMessage || '无法加载分类。')
+    }
+  }
+
+  useEffect(() => {
+    setCategoryManagerOpen(false)
+    setEditingCategoryId(null)
+    setCategoryForm(emptyCategoryForm)
+    loadCategories()
+  }, [scheduleOwnerId])
+
   useEffect(() => {
     if (!scheduleOwnerId) { setEligibleManagers([]); return }
-    getOwnerManagers(scheduleOwnerId).then(response => setEligibleManagers(response.data || [])).catch(() => setEligibleManagers([]))
-  }, [scheduleOwnerId])
+    setViewerNotice('')
+    getOwnerManagers(scheduleOwnerId).then(response => {
+      const items = response.data || []
+      setEligibleManagers(items)
+      if (isEditing) {
+        const validIds = new Set(items.map(item => Number(item.id)))
+        const originalViewerIds = initialData?.viewer_ids || []
+        if (originalViewerIds.some(id => !validIds.has(Number(id)))) {
+          setViewerNotice('部分观看者的管理权限已失效，已自动从观看名单移除。')
+        }
+        setFormData(previous => {
+          const viewerIds = previous.viewer_ids.filter(id => validIds.has(Number(id)))
+          if (viewerIds.length !== previous.viewer_ids.length) {
+            return { ...previous, viewer_ids: viewerIds }
+          }
+          return previous
+        })
+      }
+    }).catch(() => setEligibleManagers([]))
+  }, [scheduleOwnerId, isEditing, initialData])
+
+  const resetCategoryForm = () => {
+    setEditingCategoryId(null)
+    setCategoryForm(emptyCategoryForm)
+    setCategoryError('')
+  }
+
+  const saveCategory = async (event) => {
+    event.preventDefault()
+    if (!categoryForm.name.trim()) { setCategoryError('请输入分类名称。'); return }
+    setCategorySaving(true)
+    try {
+      const payload = { ...categoryForm, name: categoryForm.name.trim(), description: categoryForm.description.trim() || null }
+      if (editingCategoryId) await updateCategory(editingCategoryId, payload)
+      else await createCategory(payload, scheduleOwnerId)
+      resetCategoryForm()
+      await loadCategories()
+    } catch (requestError) {
+      setCategoryError(requestError.userMessage || '分类保存失败。')
+    } finally {
+      setCategorySaving(false)
+    }
+  }
+
+  const removeCategory = async () => {
+    if (!pendingCategoryDelete) return
+    try {
+      await deleteCategory(pendingCategoryDelete.id)
+      if (String(formData.category_id) === String(pendingCategoryDelete.id)) {
+        setFormData(previous => ({ ...previous, category_id: '' }))
+      }
+      setPendingCategoryDelete(null)
+      resetCategoryForm()
+      await loadCategories()
+    } catch (requestError) {
+      setPendingCategoryDelete(null)
+      setCategoryError(requestError.userMessage || '分类删除失败。')
+    }
+  }
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target
@@ -111,19 +191,11 @@ export default function ScheduleForm({ initialData, onSubmit, isEditing = false,
 
     setLoading(true)
     try {
-      // 将 datetime-local 的本地时间可靠地转为 UTC ISO 字符串
-      const toUTC = (localStr) => {
-        if (!localStr) return null
-        const [datePart, timePart] = localStr.split('T')
-        const [y, M, day] = datePart.split('-').map(Number)
-        const [h, m] = timePart.split(':').map(Number)
-        return new Date(y, M - 1, day, h, m).toISOString()
-      }
       await onSubmit({
         title: formData.title.trim(),
         description: formData.description.trim() || null,
-        start_time: toUTC(formData.start_time),
-        end_time: toUTC(formData.end_time),
+        start_time: beijingInputToUtcIso(formData.start_time),
+        end_time: beijingInputToUtcIso(formData.end_time),
         is_all_day: formData.is_all_day,
         is_important: formData.is_important,
         category_id: formData.category_id ? parseInt(formData.category_id) : null,
@@ -142,10 +214,12 @@ export default function ScheduleForm({ initialData, onSubmit, isEditing = false,
   }
 
   return (
+    <>
     <form className="schedule-form" onSubmit={handleSubmit}>
       <h2>{isEditing ? '编辑日程' : '新建日程'}</h2>
 
       {error && <div className="error-message">{error}</div>}
+      {viewerNotice && <div className="info-message">{viewerNotice}</div>}
 
       <div className="form-group form-row full">
         <div className="form-group" style={{ marginBottom: 0 }}>
@@ -170,7 +244,7 @@ export default function ScheduleForm({ initialData, onSubmit, isEditing = false,
 
       <div className="form-row">
         <div className="form-group">
-          <label>开始时间 *</label>
+          <label>开始时间（北京时间）*</label>
           <input
             type="datetime-local"
             name="start_time"
@@ -179,7 +253,7 @@ export default function ScheduleForm({ initialData, onSubmit, isEditing = false,
           />
         </div>
         <div className="form-group">
-          <label>结束时间 *</label>
+          <label>结束时间（北京时间）*</label>
           <input
             type="datetime-local"
             name="end_time"
@@ -189,10 +263,9 @@ export default function ScheduleForm({ initialData, onSubmit, isEditing = false,
         </div>
       </div>
 
-      {/* 分类选择 */}
-      {categories.length > 0 && (
-        <div className="form-group">
-          <label>日程分类</label>
+      {/* 个人分类选择 */}
+        <div className="form-group schedule-category-field">
+          <div className="schedule-category-heading"><label>日程分类</label><button type="button" className="text-button" onClick={() => setCategoryManagerOpen(true)}>管理分类</button></div>
           <select
             name="category_id"
             value={formData.category_id}
@@ -206,15 +279,15 @@ export default function ScheduleForm({ initialData, onSubmit, isEditing = false,
               background: 'white',
             }}
           >
-            <option value="">-- 无分类 --</option>
+            <option value="">-- 未分类 --</option>
             {categories.map((cat) => (
               <option key={cat.id} value={String(cat.id)}>
                 {cat.icon} {cat.name}
               </option>
             ))}
           </select>
+          <small>当前显示：{scheduleOwnerLabel}的个人分类</small>
         </div>
-      )}
 
       <div className="form-group schedule-visibility-picker">
         <label>观看权限 *</label>
@@ -328,5 +401,28 @@ export default function ScheduleForm({ initialData, onSubmit, isEditing = false,
         </button>
       </div>
     </form>
+
+      {categoryManagerOpen && (
+        <div className="modal-overlay" onMouseDown={() => setCategoryManagerOpen(false)}>
+          <section className="modal category-manager-modal" onMouseDown={event => event.stopPropagation()}>
+            <div className="modal-header"><div><span className="file-eyebrow">个人日程分类</span><h3>管理{scheduleOwnerLabel}的分类</h3></div><button type="button" className="text-button" onClick={() => setCategoryManagerOpen(false)}>关闭</button></div>
+            <p className="category-owner-hint">这些分类仅用于{scheduleOwnerLabel}的日程。删除分类不会删除原日程。</p>
+            {categoryError && <div className="error-message">{categoryError}</div>}
+            <form className="category-manager-form" onSubmit={saveCategory}>
+              <label>分类名称 *<input autoFocus value={categoryForm.name} onChange={event => setCategoryForm({ ...categoryForm, name: event.target.value })} maxLength={50} placeholder="例如：工作、家庭、客户" /></label>
+              <label>图标<input value={categoryForm.icon} onChange={event => setCategoryForm({ ...categoryForm, icon: event.target.value })} maxLength={10} placeholder="📋" /></label>
+              <label>颜色<input type="color" value={categoryForm.color} onChange={event => setCategoryForm({ ...categoryForm, color: event.target.value })} /></label>
+              <label className="wide">描述<input value={categoryForm.description} onChange={event => setCategoryForm({ ...categoryForm, description: event.target.value })} maxLength={200} placeholder="可选" /></label>
+              <div className="modal-actions wide"><Button variant="primary" type="submit" disabled={categorySaving}>{categorySaving ? '保存中...' : editingCategoryId ? '保存修改' : '新建分类'}</Button>{editingCategoryId && <Button onClick={resetCategoryForm}>取消编辑</Button>}</div>
+            </form>
+            <div className="category-manager-list">
+              {categories.map(category => <article key={category.id} style={{ '--category-color': category.color }}><span className="category-manager-icon">{category.icon}</span><div><strong>{category.name}</strong>{category.description && <small>{category.description}</small>}</div><div className="category-manager-actions"><Button variant="text" onClick={() => { setEditingCategoryId(category.id); setCategoryForm({ name: category.name, description: category.description || '', color: category.color || '#3788d8', icon: category.icon || '📋', sort_order: category.sort_order || 0 }); setCategoryError('') }}>编辑</Button><Button variant="danger" onClick={() => setPendingCategoryDelete(category)}>删除</Button></div></article>)}
+              {!categories.length && <div className="empty-state-small">暂无分类，可在上方创建。</div>}
+            </div>
+          </section>
+        </div>
+      )}
+      <ConfirmDialog open={!!pendingCategoryDelete} danger title="删除个人分类" message={`确定删除“${pendingCategoryDelete?.name || ''}”吗？使用该分类的日程会保留并改为“未分类”。`} confirmText="删除分类" onCancel={() => setPendingCategoryDelete(null)} onConfirm={removeCategory} />
+    </>
   )
 }

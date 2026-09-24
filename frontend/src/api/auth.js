@@ -16,6 +16,19 @@ export async function login(username, password) {
   return res.data
 }
 
+export async function verifyPasswordRecovery(username, nickname) {
+  const res = await apiClient.post('/auth/password-recovery/verify', { username, nickname })
+  return res.data
+}
+
+export async function resetRecoveredPassword(recoveryToken, newPassword) {
+  const res = await apiClient.post('/auth/password-recovery/reset', {
+    recovery_token: recoveryToken,
+    new_password: newPassword,
+  })
+  return res.data
+}
+
 /**
  * 获取当前用户信息
  */

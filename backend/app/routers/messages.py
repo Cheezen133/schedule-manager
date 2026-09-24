@@ -12,6 +12,8 @@ from ..models.user import User
 from ..models.schedule import Schedule
 from ..models.message import Message
 from ..services.schedule_permission_service import require_schedule_access
+from ..services.schedule_management_service import can_view_schedule
+from ..utils.datetime_utils import to_beijing_iso
 
 router = APIRouter(prefix="/api/v1", tags=["客户沟通"])
 
@@ -33,14 +35,14 @@ def _msg_to_dict(m: Message) -> dict:
         "voice_url": m.voice_url,
         "voice_duration": m.voice_duration,
         "is_from_client": m.is_from_client,
-        "created_at": m.created_at.isoformat() if m.created_at else None,
+        "created_at": to_beijing_iso(m.created_at),
     }
 
 
 def _msg_to_dict_with_schedule(m: Message) -> dict:
     d = _msg_to_dict(m)
     d["schedule_title"] = m.schedule.title if m.schedule else None
-    d["schedule_start"] = m.schedule.start_time.isoformat() if m.schedule and m.schedule.start_time else None
+    d["schedule_start"] = to_beijing_iso(m.schedule.start_time) if m.schedule else None
     return d
 
 
@@ -74,7 +76,7 @@ async def get_messages(
             .order_by(Message.created_at.asc())
             .all()
         )
-        return {"code": 0, "message": "ok", "data": [_msg_to_dict_with_schedule(m) for m in msgs]}
+        return {"code": 0, "message": "ok", "data": [_msg_to_dict_with_schedule(m) for m in msgs if can_view_schedule(db, m.schedule, current_user.id)]}
 
     msgs = (
         db.query(Message)

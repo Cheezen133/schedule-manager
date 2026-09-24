@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 import {
   getConversations, createConversation, createGroup, setRemark,
   getMessages, sendTextMessage, sendMediaMessage, deleteMessage, recallMessage,
-  getChatContacts, getAuthorizedMediaBlob, downloadAuthorizedChatFile,
+  getChatContacts, deleteFriend, getAuthorizedMediaBlob, downloadAuthorizedChatFile,
   addFavorite, removeFavorite, getFavorites,
   markConversationRead,
   getFriendRequests, acceptFriendRequest, rejectFriendRequest,
@@ -12,12 +12,14 @@ import {
   searchChat,
   getGroupMembers, getGroupAnnouncements, createGroupAnnouncement,
   deleteGroupAnnouncement, getGroupTodos, createGroupTodo, toggleGroupTodo, deleteGroupTodo,
-  renameGroup, setGroupMemberRole, removeGroupMember, dissolveGroup,
+  renameGroup, addGroupMembers, setGroupMemberRole, removeGroupMember, dissolveGroup,
 } from '../api/chat'
 import { getNotifications } from '../api/notifications'
 import { ConfirmDialog } from '../components/common/Ui'
 import { requestManagement } from '../api/scheduleManagement'
 import { longPressProps } from '../components/common/longPress'
+import useDebouncedValue from '../hooks/useDebouncedValue'
+import { formatBeijingDate, formatBeijingDateTime, formatBeijingShortDateTime, formatBeijingTime, isBeijingToday, parseBeijingDate } from '../utils/dateTime'
 
 function formatFileSize(bytes) {
   if (!bytes) return ''
@@ -38,6 +40,7 @@ function ProtectedChatMedia({ filename, type, alt = '图片' }) {
       .then(blob => {
         objectUrl = URL.createObjectURL(blob)
         if (active) setUrl(objectUrl)
+        else URL.revokeObjectURL(objectUrl)
       })
       .catch(() => { if (active) setFailed(true) })
     return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl) }
@@ -117,11 +120,26 @@ function GroupRenameModal({ initialName, onClose, onSubmit }) {
   return <div className="modal-overlay" onMouseDown={onClose}><form className="modal group-rename-modal" onMouseDown={event => event.stopPropagation()} onSubmit={event => { event.preventDefault(); if (name.trim()) onSubmit(name.trim()) }}><div className="modal-header"><div><span className="file-eyebrow">群聊设置</span><h3>修改群聊名称</h3></div><button type="button" className="text-button" onClick={onClose}>关闭</button></div><label>群聊名称<input autoFocus required value={name} onChange={event => setName(event.target.value)} placeholder="请输入群聊名称" maxLength={50} /></label><p className="group-source-hint">修改后会同步给所有群成员及团队群聊备忘录。</p><div className="modal-actions"><button type="button" className="btn-secondary" onClick={onClose}>取消</button><button className="btn-primary">保存名称</button></div></form></div>
 }
 
-function GroupInfoModal({ mode, members, announcements, todos, memberQuery, setMemberQuery, onClose, onToggleTodo, onRecordContextMenu, onMemberContextMenu }) {
+function GroupInviteModal({ contacts, members, submitting, onClose, onSubmit }) {
+  const [query, setQuery] = useState('')
+  const [selectedIds, setSelectedIds] = useState([])
+  const memberIds = new Set(members.map(member => member.id))
+  const candidates = contacts.filter(contact => !memberIds.has(contact.id) && `${contact.nickname || ''} ${contact.username || ''}`.toLowerCase().includes(query.trim().toLowerCase()))
+  const toggle = userId => setSelectedIds(previous => previous.includes(userId) ? previous.filter(id => id !== userId) : [...previous, userId])
+
+  return <div className="modal-overlay" onMouseDown={onClose}><section className="modal" onMouseDown={event => event.stopPropagation()} style={{ width: 440, maxHeight: '620px' }}><div className="modal-header"><div><span className="file-eyebrow">群成员管理</span><h3>邀请好友加入群聊</h3></div><button type="button" className="text-button" onClick={onClose}>关闭</button></div><input className="search-input" value={query} onChange={event => setQuery(event.target.value)} placeholder="搜索昵称或用户名" autoFocus /><p className="group-info-count">已选择 {selectedIds.length} 位好友</p><div className="contact-select-list" style={{ maxHeight: 330, overflowY: 'auto' }}>{candidates.map(contact => { const checked = selectedIds.includes(contact.id); return <label key={contact.id} className="contact-select-item" style={{ cursor: 'pointer' }}><input type="checkbox" checked={checked} onChange={() => toggle(contact.id)} /><div className="chat-conv-avatar">{(contact.nickname || contact.username || '?').charAt(0).toUpperCase()}</div><div className="chat-conv-info"><div className="chat-conv-name">{contact.nickname || contact.username}</div><div className="chat-conv-preview">@{contact.username}</div></div></label> })}{!candidates.length && <div className="empty-state">没有可邀请的好友</div>}</div><div className="modal-actions"><button type="button" className="btn-secondary" onClick={onClose}>取消</button><button type="button" className="btn-primary" disabled={!selectedIds.length || submitting} onClick={() => onSubmit(selectedIds)}>{submitting ? '邀请中…' : '邀请入群'}</button></div></section></div>
+}
+
+function GroupInfoModal({ mode, members, announcements, todos, memberQuery, setMemberQuery, onClose, onToggleTodo, onRecordContextMenu, onMemberContextMenu, myRole }) {
+  const [expanded, setExpanded] = useState(false)
   const filteredMembers = members.filter(member => `${member.nickname || ''} ${member.username || ''}`.toLowerCase().includes(memberQuery.toLowerCase()))
+  const activeTodos = todos.filter(item => !item.is_completed)
+  const records = mode === 'announcements' ? announcements : activeTodos
+  const visibleRecords = expanded ? records : records.slice(0, 2)
   const title = mode === 'members' ? '群成员' : mode === 'announcements' ? '群公告' : '群待办'
   const roleLabel = { owner: '群主', admin: '管理员', member: '成员' }
-  return <div className="modal-overlay" onMouseDown={onClose}><section className="modal group-info-modal" onMouseDown={event => event.stopPropagation()}><div className="modal-header"><div><span className="file-eyebrow">群聊信息</span><h3>{title}</h3></div><button className="text-button" onClick={onClose}>关闭</button></div>{mode === 'members' && <><label className="ui-search-field"><span>⌕</span><input value={memberQuery} onChange={event => setMemberQuery(event.target.value)} placeholder="搜索群成员" /></label><p className="group-info-count">共 {members.length} 位成员 · 右键或长按成员可进行管理</p><div className="group-member-list">{filteredMembers.map(member => <div key={member.id} className="group-member-row" onContextMenu={event => onMemberContextMenu(event, member)} {...longPressProps(event => onMemberContextMenu(event, member))}><b>{(member.nickname || member.username || '?').charAt(0)}</b><div><strong>{member.nickname || '未命名成员'}<span className={`group-role-badge ${member.role || 'member'}`}>{roleLabel[member.role] || '成员'}</span></strong><small>@{member.username || '—'}</small></div></div>)}{!filteredMembers.length && <div className="empty-state-small">没有匹配的成员</div>}</div></>}{mode === 'announcements' && <div className="group-record-list">{announcements.map(item => <article key={item.id} onContextMenu={event => onRecordContextMenu(event, 'announcement', item)} {...longPressProps(event => onRecordContextMenu(event, 'announcement', item))}><strong>{item.title}</strong><p>{item.content || '无正文'}</p><small>{item.creator_name || '群成员'} · {item.updated_at?.slice(0, 16).replace('T', ' ')}</small></article>)}{!announcements.length && <div className="empty-state-small">暂无群公告</div>}</div>}{mode === 'todos' && <div className="group-record-list">{todos.map(item => <article key={item.id} className={item.is_completed ? 'completed' : ''} onContextMenu={event => onRecordContextMenu(event, 'todo', item)} {...longPressProps(event => onRecordContextMenu(event, 'todo', item))}><button className="todo-check" onClick={() => onToggleTodo(item.id)} aria-label={item.is_completed ? '恢复待办' : '完成待办'}>{item.is_completed ? '✓' : ''}</button><div><strong>{item.title}</strong><small>{item.creator_name || '群成员'} · {item.updated_at?.slice(0, 16).replace('T', ' ')}</small></div></article>)}{!todos.length && <div className="empty-state-small">暂无群待办</div>}</div>}</section></div>
+  const managementHint = myRole === 'owner' ? '点按管理员或普通成员可管理' : myRole === 'admin' ? '点按普通成员可管理' : '点按成员可添加好友或发消息'
+  return <div className="modal-overlay" onMouseDown={onClose}><section className="modal group-info-modal" onMouseDown={event => event.stopPropagation()}><div className="modal-header"><div><span className="file-eyebrow">群聊信息</span><h3>{title}</h3></div><button className="text-button" onClick={onClose}>关闭</button></div>{mode === 'members' && <><label className="ui-search-field"><span>⌕</span><input value={memberQuery} onChange={event => setMemberQuery(event.target.value)} placeholder="搜索群成员" /></label><p className="group-info-count">共 {members.length} 位成员 · {managementHint}</p><div className="group-member-list">{filteredMembers.map(member => <div key={member.id} className="group-member-row" onClick={event => onMemberContextMenu(event, member)} onContextMenu={event => onMemberContextMenu(event, member)} {...longPressProps(event => onMemberContextMenu(event, member))}><b>{(member.nickname || member.username || '?').charAt(0)}</b><div><strong>{member.nickname || '未命名成员'}<span className={`group-role-badge ${member.role || 'member'}`}>{roleLabel[member.role] || '成员'}</span></strong><small>@{member.username || '—'}</small></div></div>)}{!filteredMembers.length && <div className="empty-state-small">没有匹配的成员</div>}</div></>}{mode === 'announcements' && <div className="group-record-list">{visibleRecords.map(item => <article key={item.id} onContextMenu={event => onRecordContextMenu(event, 'announcement', item)} {...longPressProps(event => onRecordContextMenu(event, 'announcement', item))}><strong>{item.title}</strong><p>{item.content || '无正文'}</p><small>{item.creator_name || '群成员'} · {formatBeijingDateTime(item.updated_at)}</small></article>)}{!records.length && <div className="empty-state-small">暂无群公告</div>}{records.length > 2 && <button className="text-button group-expand-button" onClick={() => setExpanded(value => !value)}>{expanded ? '收起' : `展开更多（${records.length - 2}）`}</button>}</div>}{mode === 'todos' && <div className="group-record-list">{visibleRecords.map(item => <article key={item.id} onContextMenu={event => onRecordContextMenu(event, 'todo', item)} {...longPressProps(event => onRecordContextMenu(event, 'todo', item))}><button className="todo-check" onClick={() => onToggleTodo(item.id)} aria-label="完成待办"></button><div><strong>{item.title}</strong><small>{item.creator_name || '群成员'} · {formatBeijingDateTime(item.updated_at)}</small></div></article>)}{!records.length && <div className="empty-state-small">暂无群待办</div>}{records.length > 2 && <button className="text-button group-expand-button" onClick={() => setExpanded(value => !value)}>{expanded ? '收起' : `展开更多（${records.length - 2}）`}</button>}</div>}</section></div>
 }
 
 export default function ChatPage() {
@@ -149,6 +167,8 @@ export default function ChatPage() {
   const [remarkInput, setRemarkInput] = useState('')
   const [contextMenu, setContextMenu] = useState(null)
   const [friendContext, setFriendContext] = useState(null)
+  const [pendingFriendDelete, setPendingFriendDelete] = useState(null)
+  const [friendSearchLoading, setFriendSearchLoading] = useState(false)
   const [groupRecordContext, setGroupRecordContext] = useState(null)
   const [pendingGroupRecordDelete, setPendingGroupRecordDelete] = useState(null)
   const [groupMemberContext, setGroupMemberContext] = useState(null)
@@ -182,11 +202,42 @@ export default function ChatPage() {
   const [groupTodos, setGroupTodos] = useState([])
   const [memberQuery, setMemberQuery] = useState('')
   const [groupRenameOpen, setGroupRenameOpen] = useState(false)
+  const [groupInviteOpen, setGroupInviteOpen] = useState(false)
+  const [groupInviteContacts, setGroupInviteContacts] = useState([])
+  const [groupInviteSubmitting, setGroupInviteSubmitting] = useState(false)
+  const [expandedGroupSummary, setExpandedGroupSummary] = useState({ announcements: false, todos: false })
+  const debouncedFriendSearch = useDebouncedValue(showNewChat ? searchTerm.trim() : '', 400)
 
   const msgListRef = useRef(null)
   const fileInputRef = useRef(null)
   const docFileInputRef = useRef(null)
   const sharedFileInputRef = useRef(null)
+  const latestMessageIdRef = useRef(null)
+
+  useEffect(() => {
+    let active = true
+    if (!showNewChat) {
+      setFriendSearchLoading(false)
+      return () => { active = false }
+    }
+    if (!debouncedFriendSearch) {
+      setContacts([])
+      setFriendSearchLoading(false)
+      return () => { active = false }
+    }
+    setFriendSearchLoading(true)
+    getChatContacts(false, debouncedFriendSearch)
+      .then(result => { if (active) setContacts(result.data || []) })
+      .catch(() => { if (active) setContacts([]) })
+      .finally(() => { if (active) setFriendSearchLoading(false) })
+    return () => { active = false }
+  }, [debouncedFriendSearch, showNewChat])
+
+  useEffect(() => {
+    setExpandedGroupSummary({ announcements: false, todos: false })
+    setGroupInviteOpen(false)
+    setGroupInviteContacts([])
+  }, [activeId])
 
   useEffect(() => {
     const close = event => {
@@ -199,11 +250,23 @@ export default function ChatPage() {
   }, [])
 
   const fetchConvs = useCallback(async () => {
-    try { const res = await getConversations(); setConvs(res.data || []) } catch {}
+    try {
+      const res = await getConversations()
+      const items = res.data || []
+      setConvs(items)
+      window.dispatchEvent(new CustomEvent('chat-unread-count', { detail: items.filter(item => item.has_unread).length }))
+    } catch {}
     finally { setLoading(false) }
   }, [])
 
-  useEffect(() => { fetchConvs() }, [fetchConvs])
+  // 聊天页打开时由本页唯一负责会话列表轮询；即使尚未选中会话也能收到列表更新。
+  useEffect(() => {
+    fetchConvs()
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') fetchConvs()
+    }, 15000)
+    return () => window.clearInterval(timer)
+  }, [fetchConvs])
   useEffect(() => { if (conversationId) setActiveId(parseInt(conversationId)) }, [conversationId])
   useEffect(() => {
     if (!loading && activeId && !convs.some(item => item.id === activeId)) {
@@ -212,7 +275,7 @@ export default function ChatPage() {
   }, [activeId, convs, loading, navigate])
 
   const fetchMessages = useCallback(async (convId) => {
-    try { const res = await getMessages(convId, null, 30); setMessages(res.data || []) } catch {}
+    try { const res = await getMessages(convId, null, 30); const data = res.data || []; latestMessageIdRef.current = data.at(-1)?.id || null; setMessages(data) } catch {}
   }, [])
 
   const fetchSharedFiles = useCallback(async (convId, tag = null) => {
@@ -248,15 +311,14 @@ export default function ChatPage() {
     const timer = setInterval(async () => {
       if (document.visibilityState !== 'visible') return
       try {
-        const latestId = messages.length > 0 ? messages[messages.length - 1].id : null
+        const latestId = latestMessageIdRef.current
         const res = await getMessages(activeId, latestId || undefined, 30)
         const newer = (res.data || []).filter((m) => latestId === null || m.id > latestId)
-        if (newer.length > 0) setMessages((prev) => [...prev, ...newer])
-        fetchConvs()
+        if (newer.length > 0) { latestMessageIdRef.current = newer.at(-1).id; setMessages((prev) => [...prev, ...newer]) }
       } catch {}
-    }, 10000)
+    }, 15000)
     return () => clearInterval(timer)
-  }, [activeId, messages, fetchConvs])
+  }, [activeId])
 
   useEffect(() => {
     if (activeId) markConversationRead(activeId).catch(() => {})
@@ -275,7 +337,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     fetchFriendReq()
-    const timer = setInterval(fetchFriendReq, 10000)
+    const timer = setInterval(() => { if (document.visibilityState === 'visible') fetchFriendReq() }, 30000)
     return () => clearInterval(timer)
   }, [fetchFriendReq])
 
@@ -312,8 +374,23 @@ export default function ChatPage() {
     }
   }
 
-  const openNewChat = async () => {
-    try { const res = await getChatContacts(); setContacts(res.data || []); setSearchTerm(''); setGroupName(''); setGroupMemberIds([]); setShowNewChat(true) } catch {}
+  const openNewChat = () => {
+    setContacts([]); setSearchTerm(''); setGroupName(''); setGroupMemberIds([]); setShowNewChat(true)
+  }
+
+  const searchFriendsNow = async () => {
+    const keyword = searchTerm.trim()
+    if (!keyword) { setContacts([]); return }
+    setFriendSearchLoading(true)
+    try {
+      const result = await getChatContacts(false, keyword)
+      setContacts(result.data || [])
+    } catch {
+      setContacts([])
+      showToast('搜索好友失败，请稍后重试')
+    } finally {
+      setFriendSearchLoading(false)
+    }
   }
 
   const openGroupModal = async () => {
@@ -395,7 +472,24 @@ export default function ChatPage() {
   const openFriendContextMenu = (event, conversation) => {
     if (conversation.partner.is_group) return
     event.preventDefault()
-    setFriendContext({ x: event.clientX, y: event.clientY, user: conversation.partner })
+    event.stopPropagation()
+    setFriendContext({ x: event.clientX, y: event.clientY, user: conversation.partner, conversationId: conversation.id })
+  }
+
+  const confirmDeleteFriend = async () => {
+    if (!pendingFriendDelete) return
+    try {
+      await deleteFriend(pendingFriendDelete.user.id)
+      if (activeId === pendingFriendDelete.conversationId) {
+        setActiveId(null); setMessages([]); navigate('/chat')
+      }
+      await fetchConvs()
+      showToast('好友已删除，重新添加后可恢复历史聊天')
+    } catch (error) {
+      showToast(error.userMessage || '删除好友失败')
+    } finally {
+      setPendingFriendDelete(null)
+    }
   }
 
   const openGroupInfo = async mode => {
@@ -406,7 +500,6 @@ export default function ChatPage() {
   }
 
   const getMyGroupRole = () => groupMembers.find(member => member.id === me?.id)?.role || 'member'
-  const canManageCurrentGroup = () => ['owner', 'admin'].includes(getMyGroupRole())
 
   const submitGroupPublish = async data => {
     if (!activeId || !groupPublish) return
@@ -420,7 +513,7 @@ export default function ChatPage() {
   const createFromMessage = mode => {
     const message = contextMenu?.msg
     if (!message) return
-    if (!canManageCurrentGroup()) { setContextMenu(null); showToast('仅群主或管理员可以发布群公告和群待办'); return }
+    if (!['owner', 'admin'].includes(getMyGroupRole())) { setContextMenu(null); showToast('仅群主或群管理员可以发布'); return }
     const title = (message.content || message.file_name || '').trim().slice(0, 200) || (mode === 'announcement' ? '群公告' : '群待办')
     setContextMenu(null)
     setGroupPublish({ mode, source: { messageId: message.id, title, content: message.content || '' } })
@@ -432,10 +525,7 @@ export default function ChatPage() {
 
   const openGroupRecordContextMenu = (event, type, item) => {
     event.preventDefault()
-    if (!canManageCurrentGroup()) {
-      showToast('仅群主或管理员可以删除群公告和群待办')
-      return
-    }
+    if (!['owner', 'admin'].includes(getMyGroupRole())) return
     setGroupRecordContext({ x: event.clientX, y: event.clientY, type, item })
   }
 
@@ -456,9 +546,30 @@ export default function ChatPage() {
 
   const openGroupMemberContextMenu = (event, member) => {
     event.preventDefault()
+    event.stopPropagation()
     const myRole = getMyGroupRole()
-    if (!['owner', 'admin'].includes(myRole) || member.id === me?.id || member.role === 'owner') return
+    if (member.id === me?.id) return
     setGroupMemberContext({ x: event.clientX, y: event.clientY, member, myRole })
+  }
+
+  const handleGroupMemberFriendAction = async member => {
+    setGroupMemberContext(null)
+    if (member.friendship_status === 'friend' && member.direct_conversation_id) {
+      setGroupInfoMode(null); setActiveId(member.direct_conversation_id); navigate(`/chat/${member.direct_conversation_id}`)
+      return
+    }
+    if (member.friendship_status !== 'none') return
+    try {
+      const result = await createConversation(member.id)
+      if (result.data?.id) {
+        setGroupInfoMode(null); setActiveId(result.data.id); navigate(`/chat/${result.data.id}`); await fetchConvs()
+      } else {
+        await fetchGroupTools(activeId)
+        showToast('好友申请已发送')
+      }
+    } catch (error) {
+      showToast(error.userMessage || '好友申请发送失败')
+    }
   }
 
   const confirmGroupAction = async () => {
@@ -497,6 +608,32 @@ export default function ChatPage() {
       await fetchConvs(); await fetchGroupTools(activeId)
       showToast('群聊名称已更新')
     } catch (error) { showToast(error.userMessage || '修改群聊名称失败') }
+  }
+
+  const openGroupInvite = async () => {
+    setShowGroupMenu(false)
+    try {
+      const response = await getChatContacts(true)
+      setGroupInviteContacts(response.data || [])
+      setGroupInviteOpen(true)
+    } catch (error) {
+      showToast(error.userMessage || '无法加载好友列表')
+    }
+  }
+
+  const submitGroupInvite = async userIds => {
+    if (!activeId || !userIds.length || groupInviteSubmitting) return
+    setGroupInviteSubmitting(true)
+    try {
+      await addGroupMembers(activeId, userIds)
+      setGroupInviteOpen(false)
+      await Promise.all([fetchGroupTools(activeId), fetchConvs()])
+      showToast(`已邀请 ${userIds.length} 位好友入群`)
+    } catch (error) {
+      showToast(error.userMessage || '邀请成员失败')
+    } finally {
+      setGroupInviteSubmitting(false)
+    }
   }
 
   const handleContextMenu = (e, msg) => {
@@ -572,34 +709,38 @@ export default function ChatPage() {
   const activeConv = convs.find((c) => c.id === activeId)
   const myGroupRole = groupMembers.find(member => member.id === me?.id)?.role || 'member'
   const groupCanManage = ['owner', 'admin'].includes(myGroupRole)
+  const groupIsOwner = myGroupRole === 'owner'
+  const activeGroupTodos = groupTodos.filter(todo => !todo.is_completed)
+  const visibleGroupAnnouncements = expandedGroupSummary.announcements ? groupAnnouncements : groupAnnouncements.slice(0, 2)
+  const visibleGroupTodos = expandedGroupSummary.todos ? activeGroupTodos : activeGroupTodos.slice(0, 2)
   const canRecallMessage = message => {
     if (!message || message.is_recalled || !message.created_at) return false
     // MySQL DATETIME 返回的 ISO 时间不带时区；它实际以 UTC 保存。
     // 补上 Z，避免浏览器按本地时区解析后把刚发送的消息误判为超时。
-    const rawCreatedAt = String(message.created_at)
-    const createdAt = new Date(/[zZ]$|[+-]\d{2}:\d{2}$/.test(rawCreatedAt) ? rawCreatedAt : `${rawCreatedAt}Z`).getTime()
+    const createdAt = parseBeijingDate(message.created_at)?.getTime()
     if (!Number.isFinite(createdAt) || Date.now() - createdAt > 2 * 60 * 1000) return false
     if (message.sender_id === me?.id) return true
     return Boolean(activeConv?.partner?.is_group && groupCanManage)
   }
-  const filteredContacts = contacts.filter((c) => !searchTerm || c.nickname.includes(searchTerm) || (c.username || '').includes(searchTerm))
+  const filteredContacts = showGroupModal
+    ? contacts.filter((contact) => !searchTerm || (contact.nickname || '').includes(searchTerm) || (contact.username || '').includes(searchTerm))
+    : contacts
   const totalFriendReq = friendReq.received.length
 
   const formatTime = (s) => {
     if (!s) return ''
-    const d = new Date(s); const isToday = d.toDateString() === new Date().toDateString()
-    return d.toLocaleString('zh-CN', isToday ? { hour: '2-digit', minute: '2-digit' } : { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+    return isBeijingToday(s) ? formatBeijingTime(s) : formatBeijingShortDateTime(s)
   }
 
   const formatDateTime = (s) => {
     if (!s) return ''
-    return new Date(s).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+    return formatBeijingShortDateTime(s)
   }
 
   const groupedMessages = []
   let lastDate = ''
   for (const m of messages) {
-    const date = new Date(m.created_at).toLocaleDateString('zh-CN')
+    const date = formatBeijingDate(m.created_at)
     if (date !== lastDate) { groupedMessages.push({ type: 'date', date }); lastDate = date }
     groupedMessages.push({ type: 'msg', ...m })
   }
@@ -660,27 +801,29 @@ export default function ChatPage() {
               </span>
             </div>
             <div style={{ display: 'flex', gap: '0.375rem' }}>
-              {activeConv.partner.is_group && <div className="group-more-menu-wrap"><button className="chat-group-more" onClick={() => setShowGroupMenu(value => !value)} aria-label="群聊更多功能" title="群聊更多">⋯</button>{showGroupMenu && <div className="group-more-menu"><button onClick={() => openGroupInfo('members')}>群成员</button><button onClick={() => openGroupInfo('announcements')}>查看群公告</button><button onClick={() => openGroupInfo('todos')}>查看群待办</button>{groupCanManage && <><div className="group-menu-divider" /><button onClick={() => { setShowGroupMenu(false); setGroupPublish({ mode: 'announcement', source: null }) }}>发布群公告</button><button onClick={() => { setShowGroupMenu(false); setGroupPublish({ mode: 'todo', source: null }) }}>创建群待办</button><button onClick={() => { setShowGroupMenu(false); setGroupRenameOpen(true) }}>修改群聊名称</button><button className="danger" onClick={() => { setShowGroupMenu(false); setPendingGroupAction({ type: 'dissolve' }) }}>解散群聊</button></>}</div>}</div>}
+              {activeConv.partner.is_group && <div className="group-more-menu-wrap"><button className="chat-group-more" onClick={() => setShowGroupMenu(value => !value)} aria-label="群聊更多功能" title="群聊更多">⋯</button>{showGroupMenu && <div className="group-more-menu"><button onClick={() => openGroupInfo('members')}>群成员</button><button onClick={() => openGroupInfo('announcements')}>查看群公告</button><button onClick={() => openGroupInfo('todos')}>查看群待办</button>{groupCanManage && <><div className="group-menu-divider" /><button onClick={openGroupInvite}>邀请成员</button><button onClick={() => { setShowGroupMenu(false); setGroupPublish({ mode: 'announcement', source: null }) }}>发布群公告</button><button onClick={() => { setShowGroupMenu(false); setGroupPublish({ mode: 'todo', source: null }) }}>创建群待办</button><button onClick={() => { setShowGroupMenu(false); setGroupRenameOpen(true) }}>修改群聊名称</button></>}{groupIsOwner && <button className="danger" onClick={() => { setShowGroupMenu(false); setPendingGroupAction({ type: 'dissolve' }) }}>解散群聊</button>}</div>}</div>}
               <button className="btn-cancel" onClick={() => { fetchSharedFiles(activeId); setShowFilePanel(!showFilePanel) }} style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }} title="共享文件">📁 {sharedFiles.length || ''}</button>
             </div>
           </div>
 
-          {activeConv.partner.is_group && (groupAnnouncements.length > 0 || groupTodos.some((todo) => !todo.completed)) && (
+          {activeConv.partner.is_group && (groupAnnouncements.length > 0 || activeGroupTodos.length > 0) && (
             <div className="group-chat-top-summary" aria-label="群公告和群待办">
-              {groupAnnouncements.slice(0, 1).map((announcement) => (
+              {visibleGroupAnnouncements.map((announcement) => (
                 <button key={announcement.id} type="button" className="group-top-summary-item group-top-announcement" onClick={() => openGroupInfo('announcements')}>
                   <span className="group-top-summary-icon" aria-hidden="true">公告</span>
                   <span className="group-top-summary-content"><strong>{announcement.title || '群公告'}</strong><small>{announcement.content || '点击查看完整群公告'}</small></span>
                   <span className="group-top-summary-link">查看</span>
                 </button>
               ))}
-              {groupTodos.filter((todo) => !todo.completed).slice(0, 2).map((todo) => (
+              {groupAnnouncements.length > 2 && <button type="button" className="text-button group-expand-button" onClick={() => setExpandedGroupSummary(value => ({ ...value, announcements: !value.announcements }))}>{expandedGroupSummary.announcements ? '收起群公告' : `展开更多群公告（${groupAnnouncements.length - 2}）`}</button>}
+              {visibleGroupTodos.map((todo) => (
                 <button key={todo.id} type="button" className="group-top-summary-item group-top-todo" onClick={() => openGroupInfo('todos')}>
                   <span className="group-top-summary-icon" aria-hidden="true">待办</span>
                   <span className="group-top-summary-content"><strong>{todo.title || '群待办'}</strong><small>{todo.due_at ? `截止：${formatTime(todo.due_at)}` : '点击查看和完成群待办'}</small></span>
                   <span className="group-top-summary-link">查看</span>
                 </button>
               ))}
+              {activeGroupTodos.length > 2 && <button type="button" className="text-button group-expand-button" onClick={() => setExpandedGroupSummary(value => ({ ...value, todos: !value.todos }))}>{expandedGroupSummary.todos ? '收起群待办' : `展开更多群待办（${activeGroupTodos.length - 2}）`}</button>}
             </div>
           )}
 
@@ -712,7 +855,7 @@ export default function ChatPage() {
                   sharedFiles.map(sf => (
                     <div key={sf.id} className="shared-file-item">
                       <span className="shared-file-icon">{fileTypeIcon(sf.msg_type)}</span>
-                      <span className="shared-file-name" onClick={() => sf.file_url?.startsWith('/api/') && downloadAuthorizedChatFile(sf.file_url.split('/').pop(), sf.file_name).catch(() => showToast('下载失败，请稍后重试'))}>{sf.file_name}</span>
+                      <span className="shared-file-name" onClick={() => sf.file_url?.startsWith('/api/') && downloadAuthorizedChatFile(sf.file_url.split('/').pop(), sf.file_name).catch(() => showToast('下载失败，请稍后重试'))}>{sf.msg_type === 'text' ? (sf.content || sf.file_name) : sf.file_name}</span>
                       {sf.tag && <span className="shared-file-tag">{sf.tag}</span>}
                       {sf.note && <span className="shared-file-note" title={sf.note}>💬</span>}
                       <span className="shared-file-meta">{formatFileSize(sf.file_size)} · {sf.uploader_name} · {formatDateTime(sf.created_at)}</span>
@@ -796,13 +939,18 @@ export default function ChatPage() {
         <div className="modal-overlay" onClick={() => setShowNewChat(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header"><h3>添加好友</h3><button className="btn-cancel-sm" onClick={() => setShowNewChat(false)}>关闭</button></div>
-            <input className="search-input" placeholder="搜索用户..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} autoFocus style={{ marginBottom: '0.75rem', width: '100%' }} />
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
+              <input className="search-input" placeholder="输入用户名或昵称" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); searchFriendsNow() } }} autoFocus style={{ flex: 1, minWidth: 0 }} />
+              <button type="button" className="btn-submit" onClick={searchFriendsNow} disabled={!searchTerm.trim() || friendSearchLoading}>搜索</button>
+            </div>
              <button className="btn-submit" onClick={openGroupModal} style={{ width: '100%', marginBottom: '0.75rem' }}>
                + 创建群聊
              </button>
              <div className="contact-select-list">
-              {filteredContacts.map((c) => (<div key={c.id} className="contact-select-item" onClick={() => handleNewChat(c.id)}><div className="chat-conv-avatar">{c.nickname.charAt(0).toUpperCase()}</div><div className="chat-conv-info"><div className="chat-conv-name">{c.nickname}</div><div className="chat-conv-preview">@{c.username}</div></div></div>))}
-              {filteredContacts.length === 0 && <div className="empty-state">没有找到用户</div>}
+              {!searchTerm.trim() && <div className="empty-state">请输入用户名或昵称搜索好友</div>}
+              {searchTerm.trim() && friendSearchLoading && <div className="empty-state">正在搜索…</div>}
+              {filteredContacts.map((c) => (<div key={c.id} className="contact-select-item" onClick={() => handleNewChat(c.id)}><div className="chat-conv-avatar">{(c.nickname || c.username || '?').charAt(0).toUpperCase()}</div><div className="chat-conv-info"><div className="chat-conv-name">{c.nickname || c.username}</div><div className="chat-conv-preview">@{c.username}</div></div></div>))}
+              {searchTerm.trim() && !friendSearchLoading && filteredContacts.length === 0 && <div className="empty-state">没有找到可添加的用户</div>}
             </div>
           </div>
         </div>
@@ -884,7 +1032,7 @@ export default function ChatPage() {
                     <div className="fav-item-icon">{fileTypeIcon(f.msg_type)}</div>
                     <div className="fav-item-info"><div className="fav-item-name">{f.file_name || f.content || '文件'}</div><div className="fav-item-detail">{f.partner?.display_name || '未知'} · {formatFileSize(f.file_size)} · {f.file_name ? getFileExt(f.file_name) : ''}</div></div>
                     <div className="fav-item-actions">
-                      {f.file_url && <button onClick={() => window.open(getDownloadUrl(f.file_url.split('/').pop()), '_blank')} title="下载">⬇</button>}
+                      {f.file_url && <button onClick={() => downloadAuthorizedChatFile(f.file_url.split('/').pop(), f.file_name).catch(() => showToast('下载失败，请稍后重试'))} title="下载">⬇</button>}
                       <button onClick={async () => { await removeFavorite(f.id); setFavorites((prev) => prev.filter((x) => x.id !== f.id)) }} title="取消收藏">✕</button>
                     </div>
                   </div>
@@ -927,8 +1075,8 @@ export default function ChatPage() {
                         {searchResults.files.map(sf => (
                           <div key={sf.id} className="search-result-item" onClick={() => { setActiveId(sf.conv_id); setShowSearchPanel(false); setSearchResults(null) }}>
                             <span>{fileTypeIcon(sf.msg_type)}</span>
-                            <div style={{ flex: 1 }}><div className="fav-item-name">{sf.file_name}</div><div className="fav-item-detail">{formatFileSize(sf.file_size)} · {sf.uploader_name}</div></div>
-                            <button onClick={(e) => { e.stopPropagation(); downloadAuthorizedChatFile(sf.file_url.split('/').pop(), sf.file_name).catch(() => showToast('下载失败，请稍后重试')) }}>⬇</button>
+                            <div style={{ flex: 1 }}><div className="fav-item-name">{sf.msg_type === 'text' ? '文字消息' : sf.file_name}</div>{sf.msg_type === 'text' && <div className="shared-text-content">{sf.content}</div>}<div className="fav-item-detail">来源：{sf.partner?.display_name || '聊天'}{sf.msg_type !== 'text' && ` · ${formatFileSize(sf.file_size)}`} · {sf.uploader_name}</div></div>
+                            {sf.file_url && <button onClick={(e) => { e.stopPropagation(); downloadAuthorizedChatFile(sf.file_url.split('/').pop(), sf.file_name).catch(() => showToast('下载失败，请稍后重试')) }}>⬇</button>}
                           </div>
                         ))}
                       </div>
@@ -955,13 +1103,16 @@ export default function ChatPage() {
           {activeConv?.partner?.is_group && groupCanManage && <><div className="context-menu-divider" /><div className="context-menu-item" onClick={() => createFromMessage('announcement')}>设为群公告</div><div className="context-menu-item" onClick={() => createFromMessage('todo')}>设为群待办</div></>}
         </div>
       )}
-      {friendContext && <div className="context-menu" style={{ top: friendContext.y, left: friendContext.x }}><div className="context-menu-item" onClick={() => requestScheduleManagement(friendContext.user)}>申请管理日程</div></div>}
+      {friendContext && <div className="context-menu" style={{ top: friendContext.y, left: friendContext.x }}><div className="context-menu-item" onClick={() => requestScheduleManagement(friendContext.user)}>申请管理日程</div><div className="context-menu-divider" /><div className="context-menu-item danger" onClick={() => { setPendingFriendDelete(friendContext); setFriendContext(null) }}>删除好友</div></div>}
       {groupRecordContext && <div className="context-menu" style={{ top: groupRecordContext.y, left: groupRecordContext.x }}><div className="context-menu-item danger" onClick={() => { setPendingGroupRecordDelete(groupRecordContext); setGroupRecordContext(null) }}>删除{groupRecordContext.type === 'announcement' ? '群公告' : '群待办'}</div></div>}
       {groupMemberContext && <div className="context-menu" style={{ top: groupMemberContext.y, left: groupMemberContext.x }}>
+        {groupMemberContext.member.friendship_status === 'friend' && <div className="context-menu-item" onClick={() => handleGroupMemberFriendAction(groupMemberContext.member)}>发消息</div>}
+        {groupMemberContext.member.friendship_status === 'none' && <div className="context-menu-item" onClick={() => handleGroupMemberFriendAction(groupMemberContext.member)}>添加好友</div>}
+        {groupMemberContext.member.friendship_status === 'pending_outgoing' && <div className="context-menu-item disabled">好友申请中</div>}
+        {groupMemberContext.member.friendship_status === 'pending_incoming' && <div className="context-menu-item disabled">对方已发送好友申请</div>}
         {groupMemberContext.myRole === 'owner' && groupMemberContext.member.role === 'member' && <div className="context-menu-item" onClick={() => { setPendingGroupAction({ type: 'promote', member: groupMemberContext.member }); setGroupMemberContext(null) }}>设为管理员</div>}
         {groupMemberContext.myRole === 'owner' && groupMemberContext.member.role === 'admin' && <div className="context-menu-item" onClick={() => { setPendingGroupAction({ type: 'demote', member: groupMemberContext.member }); setGroupMemberContext(null) }}>撤销管理员</div>}
-        <div className="context-menu-divider" />
-        <div className="context-menu-item danger" onClick={() => { setPendingGroupAction({ type: 'remove', member: groupMemberContext.member }); setGroupMemberContext(null) }}>移出群聊</div>
+        {((groupMemberContext.myRole === 'owner' && groupMemberContext.member.role !== 'owner') || (groupMemberContext.myRole === 'admin' && groupMemberContext.member.role === 'member')) && <><div className="context-menu-divider" /><div className="context-menu-item danger" onClick={() => { setPendingGroupAction({ type: 'remove', member: groupMemberContext.member }); setGroupMemberContext(null) }}>移出群聊</div></>}
       </div>}
 
       {/* 标签选择模态框 */}
@@ -974,11 +1125,13 @@ export default function ChatPage() {
       )}
       <ConfirmDialog open={pendingDeleteId !== null} danger title="删除消息" message="确定删除这条消息吗？删除后无法恢复。" confirmText="删除" onCancel={() => setPendingDeleteId(null)} onConfirm={confirmDelete} />
       <ConfirmDialog open={pendingRecallMessage !== null} danger title="撤回消息" message="撤回后，所有会话成员将看到撤回提示，且消息内容无法恢复。" confirmText="撤回" onCancel={() => setPendingRecallMessage(null)} onConfirm={confirmRecall} />
+      <ConfirmDialog open={pendingFriendDelete !== null} danger title="删除好友" message={`删除 ${pendingFriendDelete?.user?.display_name || pendingFriendDelete?.user?.nickname || '该好友'} 后，双方私聊将隐藏且日程授权会立即撤销；重新添加后可恢复历史聊天。`} confirmText="删除好友" onCancel={() => setPendingFriendDelete(null)} onConfirm={confirmDeleteFriend} />
       <ConfirmDialog open={pendingGroupRecordDelete !== null} danger title={pendingGroupRecordDelete?.type === 'announcement' ? '删除群公告' : '删除群待办'} message="删除后群成员将无法再查看此内容，确定继续吗？" confirmText="删除" onCancel={() => setPendingGroupRecordDelete(null)} onConfirm={deleteGroupRecord} />
-      <ConfirmDialog open={pendingGroupAction !== null} danger={['remove', 'dissolve'].includes(pendingGroupAction?.type)} title={pendingGroupAction?.type === 'dissolve' ? '永久解散群聊' : pendingGroupAction?.type === 'remove' ? '移出群成员' : pendingGroupAction?.type === 'promote' ? '设为管理员' : '撤销管理员'} message={pendingGroupAction?.type === 'dissolve' ? '解散后会永久删除全部消息、公告、待办和共享文件，且无法恢复。' : pendingGroupAction?.type === 'remove' ? `确定将 ${pendingGroupAction?.member?.nickname || pendingGroupAction?.member?.username || '该成员'} 移出群聊吗？` : pendingGroupAction?.type === 'promote' ? '该成员将获得发布群公告、群待办及管理群成员的权限。' : '该成员将恢复为普通成员。'} confirmText={pendingGroupAction?.type === 'dissolve' ? '永久解散' : pendingGroupAction?.type === 'remove' ? '移出群聊' : '确认'} onCancel={() => setPendingGroupAction(null)} onConfirm={confirmGroupAction} />
+      <ConfirmDialog open={pendingGroupAction !== null} danger={['remove', 'dissolve'].includes(pendingGroupAction?.type)} title={pendingGroupAction?.type === 'dissolve' ? '永久解散群聊' : pendingGroupAction?.type === 'remove' ? '移出群成员' : pendingGroupAction?.type === 'promote' ? '设为管理员' : '撤销管理员'} message={pendingGroupAction?.type === 'dissolve' ? '解散后会永久删除全部消息、公告、待办和共享文件，且无法恢复。' : pendingGroupAction?.type === 'remove' ? `确定将 ${pendingGroupAction?.member?.nickname || pendingGroupAction?.member?.username || '该成员'} 移出群聊吗？` : pendingGroupAction?.type === 'promote' ? '该成员将获得邀请好友、移出普通成员、修改群名及维护群公告和群待办的权限。' : '该成员将恢复为普通成员。'} confirmText={pendingGroupAction?.type === 'dissolve' ? '永久解散' : pendingGroupAction?.type === 'remove' ? '移出群聊' : '确认'} onCancel={() => setPendingGroupAction(null)} onConfirm={confirmGroupAction} />
       {groupPublish && <GroupPublishModal mode={groupPublish.mode} source={groupPublish.source} onClose={() => setGroupPublish(null)} onSubmit={submitGroupPublish} />}
       {groupRenameOpen && <GroupRenameModal initialName={activeConv?.partner?.display_name} onClose={() => setGroupRenameOpen(false)} onSubmit={submitGroupRename} />}
-      {groupInfoMode && <GroupInfoModal mode={groupInfoMode} members={groupMembers} announcements={groupAnnouncements} todos={groupTodos} memberQuery={memberQuery} setMemberQuery={setMemberQuery} onClose={() => setGroupInfoMode(null)} onToggleTodo={completeGroupTodo} onRecordContextMenu={openGroupRecordContextMenu} onMemberContextMenu={openGroupMemberContextMenu} />}
+      {groupInviteOpen && <GroupInviteModal contacts={groupInviteContacts} members={groupMembers} submitting={groupInviteSubmitting} onClose={() => setGroupInviteOpen(false)} onSubmit={submitGroupInvite} />}
+      {groupInfoMode && <GroupInfoModal mode={groupInfoMode} members={groupMembers} announcements={groupAnnouncements} todos={groupTodos} memberQuery={memberQuery} setMemberQuery={setMemberQuery} onClose={() => setGroupInfoMode(null)} onToggleTodo={completeGroupTodo} onRecordContextMenu={openGroupRecordContextMenu} onMemberContextMenu={openGroupMemberContextMenu} myRole={myGroupRole} />}
     </div>
   )
 }

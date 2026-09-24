@@ -13,11 +13,12 @@ def active_permission(db: Session, requester_id: int, owner_id: int):
     return p
 def is_effective_manager(db: Session, user_id: int, owner_id: int) -> bool: return user_id == owner_id or active_permission(db, user_id, owner_id) is not None
 def can_view_schedule(db: Session, schedule, user_id: int) -> bool:
-    # The owner and the manager who created this record always see its details.
-    if user_id in (schedule.created_by, schedule.created_by_actor):
+    if user_id == schedule.created_by:
         return True
     if not is_effective_manager(db, user_id, schedule.created_by):
         return False
+    if schedule.created_by_actor == user_id:
+        return True
     if schedule.visibility == "managers":
         return True
     if schedule.visibility == "selected":

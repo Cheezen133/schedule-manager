@@ -3,6 +3,7 @@ import { getUsers, updateUserRole, toggleUserActive, updateUserNickname } from '
 import { useAuth } from '../contexts/AuthContext'
 import Loading from '../components/common/Loading'
 import { Button, ConfirmDialog, FilterBar } from '../components/common/Ui'
+import { formatBeijingDate } from '../utils/dateTime'
 
 const ROLE_MAP = { admin: '管理员', reader: '阅读者', writer: '录入者' }
 const ROLE_COLORS = { admin: 'role-admin', reader: 'role-reader', writer: 'role-writer' }
@@ -28,7 +29,7 @@ export default function UserManagementPage() {
     try { await updateUserNickname(userId, newNickname.trim()); setEditingNickname(null); fetchUsers(page) } catch (err) { setError(err.userMessage || '保存失败。') }
   }
   const totalPages = Math.ceil(total / 20)
-  const formatDate = value => value ? new Date(value).toLocaleDateString('zh-CN') : '—'
+  const formatDate = value => value ? formatBeijingDate(value) : '—'
   if (loading && !users.length) return <Loading />
   return <div className="page-content"><div className="page-heading"><div><span>系统管理</span><h2>用户管理</h2></div></div>
     <FilterBar className="user-filter-bar"><label>角色<select value={roleFilter} onChange={event => { setRoleFilter(event.target.value); setPage(1) }}><option value="">全部角色</option><option value="admin">管理员</option><option value="reader">阅读者</option><option value="writer">录入者</option></select></label><span className="user-total">共 {total} 人</span></FilterBar>

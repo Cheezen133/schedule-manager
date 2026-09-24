@@ -1,21 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import api from '../api/client'
+import { downloadAuthorizedFile } from '../api/files'
 import { BackButton } from '../components/memo/MemoNav'
+import useDebouncedValue from '../hooks/useDebouncedValue'
+import { formatBeijingDateTime } from '../utils/dateTime'
 
 export default function PersonalFilePage() {
   const [folders, setFolders] = useState([]), [files, setFiles] = useState([]), [folderId, setFolderId] = useState(null)
   const [q, setQ] = useState(''), [tag, setTag] = useState(''), [error, setError] = useState('')
+  const debouncedQ = useDebouncedValue(q), debouncedTag = useDebouncedValue(tag)
   const [folderDialog, setFolderDialog] = useState(null), [moveDialog, setMoveDialog] = useState(null), [confirmDialog, setConfirmDialog] = useState(null)
   const input = useRef(null)
   const load = useCallback(async () => {
     try {
       const [folderRes, fileRes] = await Promise.all([
         api.get('/memos/folders'),
-        api.get('/memos/files', { params: { ...(folderId ? { folder_id: folderId } : {}), ...(q ? { q } : {}), ...(tag ? { tag } : {}) } }),
+        api.get('/memos/files', { params: { ...(folderId ? { folder_id: folderId } : {}), ...(debouncedQ ? { q: debouncedQ } : {}), ...(debouncedTag ? { tag: debouncedTag } : {}) } }),
       ])
       setFolders(folderRes.data?.data || []); setFiles(fileRes.data?.data || []); setError('')
     } catch { setError('无法加载个人文件。') }
-  }, [folderId, q, tag])
+  }, [folderId, debouncedQ, debouncedTag])
   useEffect(() => { load() }, [load])
   const activeFolder = folders.find(folder => folder.id === folderId)
   const currentFolders = folders.filter(folder => folder.parent_id === folderId)
@@ -48,6 +52,10 @@ export default function PersonalFilePage() {
     try { await api.delete(`/memos/files/${confirmDialog.file.id}`); setConfirmDialog(null); load() } catch { setError('删除文件失败。') }
   }
   const clearFilters = () => { setQ(''); setTag('') }
+  const downloadFile = async item => {
+    try { await downloadAuthorizedFile(item.download_url, item.name); setError('') }
+    catch (err) { setError(err.userMessage || '下载文件失败，请重新登录后重试。') }
+  }
 
   return <div className="memo-page personal-file-page">
     <BackButton fallback="/profile/memos/personal" />
@@ -65,7 +73,7 @@ export default function PersonalFilePage() {
       <div className="file-browser file-table">
         <div className="file-table-head"><span>名称</span><span>标签 / 类型</span><span>操作</span></div>
         {currentFolders.map(folder => <div className="file-row folder" key={folder.id}><button className="file-name-cell" onClick={() => setFolderId(folder.id)}><b className="file-icon">📁</b><span><strong>{folder.name}</strong><small>文件夹</small></span></button><span className="file-kind">文件夹</span><span className="file-row-actions"><button className="text-button" onClick={() => setFolderDialog({ name: folder.name, folder })}>重命名</button></span></div>)}
-        {files.map(item => <div className="file-row" key={item.id}><a className="file-name-cell" href={item.download_url} download><b className="file-icon">📄</b><span><strong>{item.name}</strong><small>{item.sender_name || '我'} · {item.created_at ? item.created_at.slice(0, 16).replace('T', ' ') : '未知时间'}</small></span></a><span className="file-tag">{item.tags || '无标签'}</span><span className="file-row-actions"><button className="text-button" onClick={() => setMoveDialog({ file: item, folder_id: item.folder_id || '' })}>移动</button><a className="text-button" href={item.download_url} download>下载</a><button className="text-button danger" onClick={() => setConfirmDialog({ file: item })}>删除</button></span></div>)}
+        {files.map(item => <div className="file-row" key={item.id}><button type="button" className="file-name-cell" onClick={() => downloadFile(item)}><b className="file-icon">📄</b><span><strong>{item.name}</strong><small>{item.sender_name || '我'} · {item.created_at ? formatBeijingDateTime(item.created_at) : '未知时间'}</small></span></button><span className="file-tag">{item.tags || '无标签'}</span><span className="file-row-actions"><button className="text-button" onClick={() => setMoveDialog({ file: item, folder_id: item.folder_id || '' })}>移动</button><button type="button" className="text-button" onClick={() => downloadFile(item)}>下载</button><button className="text-button danger" onClick={() => setConfirmDialog({ file: item })}>删除</button></span></div>)}
         {!files.length && !currentFolders.length && <div className="file-empty"><span>📂</span><strong>此文件夹为空</strong><p>新建文件夹或上传文件，开始整理资料。</p></div>}
       </div>
     </section>

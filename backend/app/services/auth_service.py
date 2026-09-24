@@ -7,7 +7,7 @@ import re
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from ..models.user import User
-from ..utils.security import create_access_token
+from ..utils.security import create_access_token, create_password_recovery_token
 
 
 def _hash_password(password: str) -> str:
@@ -58,12 +58,15 @@ def register_user(db: Session, username: str, password: str, nickname: str, phon
     # 密码哈希
     password_hash = _hash_password(password)
 
+    # 全新部署或清空数据后的第一个账号必须能完成系统初始化。
+    # 已有用户的角色不受此逻辑影响。
+    is_first_user = db.query(User.id).first() is None
     user = User(
         username=username,
         password_hash=password_hash,
         nickname=nickname,
         phone=phone,
-        role="writer",
+        role="admin" if is_first_user else "writer",
     )
     db.add(user)
     db.commit()
@@ -98,3 +101,29 @@ def login_user(db: Session, username: str, password: str) -> dict | None:
     })
 
     return {"access_token": token, "user": user}
+
+
+def verify_password_recovery_identity(db: Session, username: str, nickname: str) -> str | None:
+    """用户名与当前昵称精确匹配且账号启用时，签发短期重置凭证。"""
+    clean_username = username.strip()
+    clean_nickname = nickname.strip()
+    user = db.query(User).filter(User.username == clean_username).first()
+    if (
+        user is None
+        or not user.is_active
+        or user.username != clean_username
+        or user.nickname != clean_nickname
+    ):
+        return None
+    return create_password_recovery_token(user.id)
+
+
+def reset_password(db: Session, user_id: int, new_password: str) -> bool:
+    """为启用账号写入新的密码哈希。"""
+    user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
+    if user is None:
+        return False
+    user.password_hash = _hash_password(new_password)
+    user.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return True

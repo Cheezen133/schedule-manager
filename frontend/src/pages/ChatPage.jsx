@@ -19,6 +19,9 @@ import { ConfirmDialog } from '../components/common/Ui'
 import { requestManagement } from '../api/scheduleManagement'
 import { longPressProps } from '../components/common/longPress'
 import useDebouncedValue from '../hooks/useDebouncedValue'
+import useIsMobile from '../hooks/useIsMobile'
+import { useMobileNav } from '../components/mobile/MobileNavBar'
+import MobileActionSheet from '../components/mobile/MobileActionSheet'
 import { formatBeijingDate, formatBeijingDateTime, formatBeijingShortDateTime, formatBeijingTime, isBeijingToday, parseBeijingDate } from '../utils/dateTime'
 
 function formatFileSize(bytes) {
@@ -149,6 +152,8 @@ export default function ChatPage() {
 
   const [convs, setConvs] = useState([])
   const [activeId, setActiveId] = useState(parseInt(conversationId) || null)
+  const isMobile = useIsMobile()
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [messages, setMessages] = useState([])
   const [text, setText] = useState('')
   const [pendingDeleteId, setPendingDeleteId] = useState(null)
@@ -268,6 +273,12 @@ export default function ChatPage() {
     return () => window.clearInterval(timer)
   }, [fetchConvs])
   useEffect(() => { if (conversationId) setActiveId(parseInt(conversationId)) }, [conversationId])
+  // 手机端：会话列表（/chat）和聊天窗口（/chat/会话号）是前后两页，由网址决定显示哪一页。
+  // 回到列表时清空当前会话；在列表里选中会话（点击、搜索结果、新建等）时跳转到聊天窗口，返回键即可回到列表
+  useEffect(() => { if (isMobile && !conversationId) setActiveId(null) }, [isMobile, conversationId])
+  useEffect(() => {
+    if (isMobile && activeId && String(activeId) !== conversationId) navigate(`/chat/${activeId}`)
+  }, [isMobile, activeId]) // 只在当前会话变化时跳转，网址变化不触发
   useEffect(() => {
     if (!loading && activeId && !convs.some(item => item.id === activeId)) {
       setActiveId(null); setMessages([]); setShowGroupMenu(false); navigate('/chat')
@@ -710,6 +721,31 @@ export default function ChatPage() {
   const myGroupRole = groupMembers.find(member => member.id === me?.id)?.role || 'member'
   const groupCanManage = ['owner', 'admin'].includes(myGroupRole)
   const groupIsOwner = myGroupRole === 'owner'
+
+  // 手机端导航栏：聊天窗口显示对方名字，右上角「···」打开会话菜单；会话列表右上角「＋」发起新聊天
+  const inMobileThread = isMobile && Boolean(conversationId)
+  useMobileNav(inMobileThread
+    ? { title: activeConv?.partner.display_name, rightLabel: '···', onRight: () => setMobileMenuOpen(true) }
+    : { onAdd: openNewChat })
+  // 手机端会话菜单：收纳网页端聊天顶栏里的全部操作（备注名、群管理、共享文件）
+  const openSharedFiles = () => { fetchSharedFiles(activeId); setShowFilePanel(true) }
+  const mobileMenuActions = !activeConv ? [] : activeConv.partner.is_group ? [
+    { label: '群成员', onClick: () => openGroupInfo('members') },
+    { label: '群公告', onClick: () => openGroupInfo('announcements') },
+    { label: '群待办', onClick: () => openGroupInfo('todos') },
+    ...(groupCanManage ? [
+      { label: '邀请成员', onClick: openGroupInvite },
+      { label: '发布群公告', onClick: () => setGroupPublish({ mode: 'announcement', source: null }) },
+      { label: '创建群待办', onClick: () => setGroupPublish({ mode: 'todo', source: null }) },
+      { label: '修改群聊名称', onClick: () => setGroupRenameOpen(true) },
+    ] : []),
+    { label: '共享文件', onClick: openSharedFiles },
+    ...(groupIsOwner ? [{ label: '解散群聊', danger: true, onClick: () => setPendingGroupAction({ type: 'dissolve' }) }] : []),
+  ] : [
+    { label: '设置备注名', onClick: () => { setRemarkInput(activeConv.partner.remark || ''); setEditingRemark(true) } },
+    { label: '共享文件', onClick: openSharedFiles },
+  ]
+
   const activeGroupTodos = groupTodos.filter(todo => !todo.is_completed)
   const visibleGroupAnnouncements = expandedGroupSummary.announcements ? groupAnnouncements : groupAnnouncements.slice(0, 2)
   const visibleGroupTodos = expandedGroupSummary.todos ? activeGroupTodos : activeGroupTodos.slice(0, 2)
@@ -757,7 +793,7 @@ export default function ChatPage() {
   const fileTypeIcon = (t) => ({ image: '🖼', video: '🎬' }[t] || '📄')
 
   return (
-    <div className="page-content chat-page">
+    <div className={`page-content chat-page${isMobile ? (conversationId ? ' m-chat-thread' : ' m-chat-list') : ''}`}>
       {toast && <div className="fav-toast">{toast}</div>}
 
       {/* 左栏 */}
@@ -867,7 +903,7 @@ export default function ChatPage() {
           )}
 
           {/* 消息列表 */}
-          <div className="chat-msg-list" ref={msgListRef}>
+          <div className={`chat-msg-list${activeConv.partner.is_group ? ' is-group' : ''}`} ref={msgListRef}>
             {messages.length === 0 && <div className="empty-state">开始聊天吧</div>}
             {groupedMessages.map((item, idx) => {
               if (item.type === 'date') return <div key={`d-${idx}`} className="chat-date-sep"><span>{item.date}</span></div>
@@ -1132,6 +1168,7 @@ export default function ChatPage() {
       {groupRenameOpen && <GroupRenameModal initialName={activeConv?.partner?.display_name} onClose={() => setGroupRenameOpen(false)} onSubmit={submitGroupRename} />}
       {groupInviteOpen && <GroupInviteModal contacts={groupInviteContacts} members={groupMembers} submitting={groupInviteSubmitting} onClose={() => setGroupInviteOpen(false)} onSubmit={submitGroupInvite} />}
       {groupInfoMode && <GroupInfoModal mode={groupInfoMode} members={groupMembers} announcements={groupAnnouncements} todos={groupTodos} memberQuery={memberQuery} setMemberQuery={setMemberQuery} onClose={() => setGroupInfoMode(null)} onToggleTodo={completeGroupTodo} onRecordContextMenu={openGroupRecordContextMenu} onMemberContextMenu={openGroupMemberContextMenu} myRole={myGroupRole} />}
+      {mobileMenuOpen && <MobileActionSheet title={activeConv?.partner.display_name} actions={mobileMenuActions} onClose={() => setMobileMenuOpen(false)} />}
     </div>
   )
 }

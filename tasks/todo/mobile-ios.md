@@ -15,8 +15,7 @@
 
 ## 待做
 
-- [ ] 待审核页 `ReviewPage`
-- [ ] 通知页 `NotificationPage`
+- [ ] 「通知」标签下的通知页 `NotificationPage` 和待审核页 `ReviewPage`：两页已并入同一个底部标签，顶部有分段切换（2026-09-25），页面内容本身还没适配
 - [ ] 「我的」下的子页：仪表盘 `DashboardPage`；备忘录总览 `MemoOverviewPage`；个人备忘录 `PersonalMemoPage` 及其下的病例、文件、收藏、共享文件（`PatientListPage`、`PatientDetailPage`、`PersonalFilePage`、`PersonalCollectionPage`）；团队群聊备忘录 `TeamMemoPage` 及其下的公告、待办、共享文件（`TeamSectionPage`）
 - [ ] 联系人 `ChatContactsPage`、电话簿 `ContactsPage`
 - [ ] 搜索结果 `SearchResultPage`、用户管理 `UserManagementPage`

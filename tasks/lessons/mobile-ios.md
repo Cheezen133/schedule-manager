@@ -25,10 +25,11 @@
 
 ## 验证
 
-- 测试环境和正式环境完全隔离，测试数据只进临时库：
-  1. 在临时目录新建 SQLite 库：把 `DATABASE_URL` 指向它，用 `Base.metadata.create_all` 建表。
-  2. 用这个库在 8001 端口起后端。
-  3. 用一份放在临时目录的 Vite 配置在 5174 端口起前端。要点：`root` 指向 `frontend/`；`/api` 代理到 8001；`cacheDir` 放临时目录，避免和 5173 的正式前端共用缓存；`esbuild.jsx` 设为 `automatic`，因为配置文件不在项目里，引不到 React 插件。
-  4. 测试账号用注册接口 `/api/v1/auth/register` 创建；需要特殊字段值时，直接改临时库。
+- 测试环境和正式环境完全隔离，测试数据只进测试库。测试环境固定放在 `~/schedule-manager-test/`，不放系统临时目录：`/private/tmp` 开机即清空，每天 0 点还会删掉 3 天没读写过的文件。
+  1. 测试库是该文件夹里的 `test.db`，上传文件在 `uploads/`。重建空库用 `create_test_db.sh`（会删掉旧库，用 `Base.metadata.create_all` 建表）；假 PDF 和演示数据用 `make_fake_pdfs.py`、`seed_case_review.py` 生成。
+  2. 后端用 `start-backend.sh` 在 8001 端口起，前端用 `start-frontend.sh` 在 5174 端口起；`.claude/launch.json` 的两个测试项调用的就是这两个脚本。
+  3. 前端用该文件夹里的 `vite.test.config.mjs`。要点：`root` 指向 `frontend/`；`/api` 代理到 8001；`cacheDir` 放该文件夹，避免和 5173 的正式前端共用缓存；`esbuild.jsx` 设为 `automatic`，因为配置文件不在项目里，引不到 React 插件。
+  4. 测试账号用注册接口 `/api/v1/auth/register` 创建；需要特殊字段值时，直接改测试库。
+  5. 库里存的是上传文件的绝对路径：挪动测试环境后，要把 `review_case_files`、`review_daily_report_files` 的 `file_path` 和 `review_annotations` 的 `audio_path` 改成新位置，否则页面仍去旧位置找文件。
 - 每个页面改完，在手机宽度下把该页功能逐项走一遍，再切到 1280px 确认网页端没有变化。
 - 内置预览窗口约 346px 宽，手机截图用 340×736 视口。截图和动画可能滞后，以用 JS 读到的页面状态为准。

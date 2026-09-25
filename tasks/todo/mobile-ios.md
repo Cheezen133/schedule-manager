@@ -23,7 +23,7 @@
 - [ ] 补测已适配页面里还没测过的功能：消息页发图片／文件／视频、语音输入、键盘弹起时的输入栏；日程附件上传；分类管理弹窗、查看者列表、共享文件、收藏与标签面板
 - [ ] iOS 模拟器验证 —— 前提：Xcode 装好，用户执行过 `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`；验证：在模拟器的 Safari 里走一遍登录和各标签页
 - [ ] 企业微信真机验证 —— 前提：原作者把代码部署到他的服务器；验证：在企业微信自建应用里走一遍登录和各标签页，语音输入、录音也在这一步补测（需要 https，局域网 http 预览里用不了）
-- [ ] 收尾：删掉 `.claude/launch.json` 里的 `test-backend`、`test-frontend` 两项并停掉测试服务；只挑出代码提交交给原作者，不带 `AGENTS.md` 和 `tasks/`（交付方式待定：原作者给仓库权限、fork 后提 PR，或直接发代码）
+- [ ] 收尾：删掉 `.claude/launch.json` 里的 `test-backend`、`test-frontend` 两项并停掉测试服务，测试文件夹 `~/schedule-manager-test/` 留不留问用户；只挑出代码提交交给原作者，不带 `AGENTS.md` 和 `tasks/`（交付方式待定：原作者给仓库权限、fork 后提 PR，或直接发代码）
 
 ## Review
 

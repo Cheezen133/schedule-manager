@@ -1,15 +1,16 @@
 import axios from 'axios'
 
-// 模块级 token，不受其他标签页 sessionStorage 覆盖影响
-let _token = sessionStorage.getItem('access_token')
+// 登录令牌存 localStorage：关闭页面（包括在企业微信里关掉应用）后再打开仍保持登录，
+// 有效期由后端 JWT_EXPIRE_HOURS 决定；模块级变量缓存当前令牌
+let _token = localStorage.getItem('access_token')
 
 export function setToken(token) {
   _token = token
   if (token) {
-    sessionStorage.setItem('access_token', token)
+    localStorage.setItem('access_token', token)
   } else {
-    sessionStorage.removeItem('access_token')
-    sessionStorage.removeItem('user')
+    localStorage.removeItem('access_token')
+    localStorage.removeItem('user')
   }
 }
 
@@ -40,8 +41,8 @@ apiClient.interceptors.response.use(
     // 401 → 跳转登录
     if (error.response?.status === 401) {
       _token = null
-      sessionStorage.removeItem('access_token')
-      sessionStorage.removeItem('user')
+      localStorage.removeItem('access_token')
+      localStorage.removeItem('user')
       if (window.location.pathname !== '/login') {
         window.location.href = '/login'
       }

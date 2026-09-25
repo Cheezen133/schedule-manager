@@ -8,15 +8,15 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  // 初始化：从 sessionStorage 恢复登录状态
+  // 初始化：从 localStorage 恢复登录状态
   useEffect(() => {
     const token = getToken()
-    const savedUser = sessionStorage.getItem('user')
+    const savedUser = localStorage.getItem('user')
     if (token && savedUser) {
       try {
         setUser(JSON.parse(savedUser))
       } catch {
-        sessionStorage.removeItem('user')
+        localStorage.removeItem('user')
         setToken(null)
       }
     }
@@ -27,7 +27,7 @@ export function AuthProvider({ children }) {
       getCurrentUser()
         .then((data) => {
           setUser(data)
-          sessionStorage.setItem('user', JSON.stringify(data))
+          localStorage.setItem('user', JSON.stringify(data))
         })
         .catch(() => {
           setToken(null)
@@ -38,7 +38,7 @@ export function AuthProvider({ children }) {
 
   const loginUser = useCallback((token, userInfo) => {
     setToken(token)
-    sessionStorage.setItem('user', JSON.stringify(userInfo))
+    localStorage.setItem('user', JSON.stringify(userInfo))
     setUser(userInfo)
   }, [])
 

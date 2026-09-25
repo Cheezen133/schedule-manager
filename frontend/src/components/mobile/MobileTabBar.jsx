@@ -1,0 +1,50 @@
+import { useEffect, useState } from 'react'
+import { NavLink } from 'react-router-dom'
+import { getPendingSchedules } from '../../api/schedules'
+
+// 手机端底部标签栏：5 个常用入口，其余功能收进「我的」
+const TABS = [
+  { to: '/', label: '日历', icon: 'calendar' },
+  { to: '/review', label: '待审核', icon: 'review' },
+  { to: '/chat', label: '消息', icon: 'chat' },
+  { to: '/notifications', label: '通知', icon: 'bell' },
+  { to: '/me', label: '我的', icon: 'me' },
+]
+
+export const isTabPath = pathname => TABS.some(tab => tab.to === pathname)
+
+// 仿 SF Symbols 的线性图标，选中时换成实心样式
+function TabIcon({ name, active }) {
+  const fill = active ? 'currentColor' : 'none'
+  const inner = active ? '#fff' : 'currentColor'
+  switch (name) {
+    case 'calendar':
+      return <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3.2" fill={fill} /><path d="M3.5 10h17" stroke={inner} /><path d="M8 3v4M16 3v4" /></svg>
+    case 'review':
+      return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill={fill} /><path d="M8.2 12.4l2.6 2.6 5-5.4" stroke={inner} /></svg>
+    case 'chat':
+      return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5c-4.7 0-8.5 3-8.5 6.9 0 2.2 1.2 4.1 3.1 5.4-.2 1.2-.8 2.3-1.7 3.2 1.9-.1 3.5-.8 4.6-1.8.8.2 1.6.3 2.5.3 4.7 0 8.5-3.1 8.5-7.1S16.7 4.5 12 4.5z" fill={fill} /></svg>
+    case 'bell':
+      return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z" fill={fill} /><path d="M10 20.5a2 2 0 0 0 4 0" /></svg>
+    default:
+      return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill={fill} /><circle cx="12" cy="10" r="3.2" stroke={inner} /><path d="M6.6 18.3c1.3-1.9 3.2-3 5.4-3s4.1 1.1 5.4 3" stroke={inner} /></svg>
+  }
+}
+
+const Badge = ({ count }) => count > 0 ? <span className="m-tab-badge">{count > 99 ? '99+' : count}</span> : null
+
+export default function MobileTabBar({ notificationCount = 0, chatUnreadCount = 0 }) {
+  const [pendingReviewCount, setPendingReviewCount] = useState(0)
+  useEffect(() => {
+    const load = () => getPendingSchedules().then(response => setPendingReviewCount((response.data || []).length)).catch(() => setPendingReviewCount(0))
+    load(); const timer = setInterval(() => { if (document.visibilityState === 'visible') load() }, 30000)
+    return () => clearInterval(timer)
+  }, [])
+  const counts = { review: pendingReviewCount, chat: chatUnreadCount, bell: notificationCount }
+  return <nav className="m-tabbar">{TABS.map(tab =>
+    <NavLink key={tab.to} to={tab.to} end>{({ isActive }) => <>
+      <span className="m-tab-icon"><TabIcon name={tab.icon} active={isActive} /><Badge count={counts[tab.icon] || 0} /></span>
+      <span className="m-tab-label">{tab.label}</span>
+    </>}</NavLink>)}
+  </nav>
+}

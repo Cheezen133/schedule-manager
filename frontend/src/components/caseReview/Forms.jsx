@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { createReviewCase, createReviewProject, updateReviewCase, updateReviewProject, uploadCaseFiles } from '../../api/caseReview'
 import { errorText, progressText } from './common'
+import { DictationButton, VoiceRecorder } from './Voice'
 
 // 新建／编辑项目
 export function ProjectFormModal({ project, onClose, onSaved }) {
@@ -77,27 +78,31 @@ export function CaseFormModal({ projectId, members, reviewCase, onClose, onSaved
   </div>
 }
 
-// 写批注：draft 是在 PDF 上点出或框出的位置
-export function AnnotationEditor({ draft, initialContent = '', onCancel, onSave }) {
+// 写批注：draft 是在 PDF 上点出或框出的位置。新批注可以附一段录音；allowEmpty 用于修改语音批注（文字可删空）
+export function AnnotationEditor({ draft, initialContent = '', allowEmpty = false, onCancel, onSave }) {
   const [content, setContent] = useState(initialContent)
+  const [voice, setVoice] = useState(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const submit = async event => {
     event.preventDefault()
     setSaving(true); setError('')
     try {
-      await onSave(content.trim())
+      await onSave(content.trim(), voice)
     } catch (err) {
       setError(errorText(err))
       setSaving(false)
     }
   }
+  const canSave = Boolean(content.trim() || voice || allowEmpty)
   return <div className="modal-overlay">
     <form className="modal cr-modal" onSubmit={submit}>
       <div className="modal-header"><h3>{draft ? `第 ${draft.page} 页 · ${draft.kind === 'rect' ? '框选批注' : '点注'}` : '修改批注'}</h3><button type="button" className="text-button" onClick={onCancel}>取消</button></div>
       {error && <div className="error-message">{error}</div>}
-      <textarea className="cr-note-input" autoFocus required rows={4} maxLength={2000} value={content} onChange={event => setContent(event.target.value)} placeholder="写下对这里的意见" />
-      <div className="modal-actions"><button type="button" className="btn-secondary" onClick={onCancel}>取消</button><button className="btn-primary" disabled={saving || !content.trim()}>{saving ? '保存中…' : '保存批注'}</button></div>
+      <textarea className="cr-note-input" autoFocus rows={4} maxLength={2000} value={content} onChange={event => setContent(event.target.value)} placeholder={draft ? '写下对这里的意见，也可以只录一段语音' : '写下对这里的意见'} />
+      <div className="cr-voice-tools"><DictationButton onText={text => setContent(previous => previous ? `${previous}${text}` : text)} /></div>
+      {draft && <VoiceRecorder value={voice} onChange={setVoice} />}
+      <div className="modal-actions"><button type="button" className="btn-secondary" onClick={onCancel}>取消</button><button className="btn-primary" disabled={saving || !canSave}>{saving ? '保存中…' : '保存批注'}</button></div>
     </form>
   </div>
 }

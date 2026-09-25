@@ -48,9 +48,20 @@ export default function CaseReviewProjectPage() {
       notify(errorText(err, '删除失败'))
     }
   }
-  const onAdd = tab === 'cases' ? () => setCaseForm(true) : tab === 'reports' ? () => setComposerOpen(true) : project?.can_manage ? () => setPickerOpen(true) : undefined
+  // 按当前用户在项目里的权限决定显示哪些操作
+  const perms = project?.my_permissions || []
+  const canUpload = perms.includes('upload')
+  const canReport = perms.includes('report')
+  const menuActions = project ? [
+    ...(perms.includes('export') ? [{ label: '导出结论表格', onClick: () => exportCases() }] : []),
+    ...(project.can_manage ? [{ label: '编辑项目', onClick: () => setProjectForm(true) }] : []),
+    ...(project.can_delete ? [{ label: '删除项目', danger: true, onClick: () => setConfirmDelete(true) }] : []),
+  ] : []
+  const onAdd = tab === 'cases' ? (canUpload ? () => setCaseForm(true) : undefined)
+    : tab === 'reports' ? (canReport ? () => setComposerOpen(true) : undefined)
+    : project?.can_manage ? () => setPickerOpen(true) : undefined
   const addLabel = { cases: '新建病历', reports: '写汇报', members: '添加成员' }[tab]
-  useMobileNav({ title: project?.name || '项目', onAdd, addLabel, rightLabel: project ? '···' : null, onRight: () => setMenuOpen(true) })
+  useMobileNav({ title: project?.name || '项目', onAdd, addLabel, rightLabel: menuActions.length ? '···' : null, onRight: () => setMenuOpen(true) })
 
   const counts = useMemo(() => {
     const result = { '': cases.length }
@@ -65,10 +76,7 @@ export default function CaseReviewProjectPage() {
   if (error) return <div className="memo-page"><BackButton fallback="/case-review" /><div className="error-message">{error}</div></div>
   if (!project) return <div className="memo-page"><div className="cr-muted">加载中…</div></div>
 
-  const menuActions = [
-    { label: '导出结论表格', onClick: exportCases },
-    ...(project.can_manage ? [{ label: '编辑项目', onClick: () => setProjectForm(true) }, { label: '删除项目', danger: true, onClick: () => setConfirmDelete(true) }] : []),
-  ]
+  const reviewers = project.members.filter(member => member.permissions.includes('conclude'))
   return <div className="memo-page cr-project">
     {!isMobile && <>
       <BackButton fallback="/case-review" />
@@ -84,9 +92,9 @@ export default function CaseReviewProjectPage() {
       <div className="cr-case-toolbar">
         <div className="cr-status-filter">{STATUS_OPTIONS.map(([key, label]) => <button type="button" key={key || 'all'} className={status === key ? 'is-active' : ''} onClick={() => setStatus(key)}>{label}<span>{counts[key] || 0}</span></button>)}</div>
         <input className="cr-case-search" value={query} onChange={event => setQuery(event.target.value)} placeholder="搜索编号或标题" />
-        <button type="button" className="btn-primary cr-desktop-only" onClick={() => setCaseForm(true)}>新建病历</button>
+        {canUpload && <button type="button" className="btn-primary cr-desktop-only" onClick={() => setCaseForm(true)}>新建病历</button>}
       </div>
-      {!cases.length && <div className="empty-state cr-empty">还没有病历。{isMobile ? '点右上角「＋」' : '点「新建病历」'}添加，并上传病历 PDF。</div>}
+      {!cases.length && <div className="empty-state cr-empty">还没有病历。{canUpload ? `${isMobile ? '点右上角「＋」' : '点「新建病历」'}添加，并上传病历 PDF。` : ''}</div>}
       {cases.length > 0 && !visibleCases.length && <div className="empty-state-small">没有符合条件的病历</div>}
       <div className="cr-case-list">
         {visibleCases.map(item => <Link key={item.id} to={`/case-review/${projectId}/cases/${item.id}`} className="cr-case-row">
@@ -99,10 +107,10 @@ export default function CaseReviewProjectPage() {
         </Link>)}
       </div>
     </div>}
-    {tab === 'reports' && <DailyReports projectId={project.id} composerOpen={composerOpen} onComposerClose={() => setComposerOpen(false)} />}
+    {tab === 'reports' && <DailyReports projectId={project.id} canWrite={canReport} composerOpen={composerOpen} onComposerClose={() => setComposerOpen(false)} />}
     {tab === 'members' && <ProjectMembers project={project} onChanged={() => { loadProject(); loadCases() }} pickerOpen={pickerOpen} onPickerClose={() => setPickerOpen(false)} />}
 
-    {caseForm && <CaseFormModal projectId={project.id} members={project.members} onClose={() => setCaseForm(false)} onSaved={id => navigate(`/case-review/${project.id}/cases/${id}`)} />}
+    {caseForm && <CaseFormModal projectId={project.id} members={reviewers} onClose={() => setCaseForm(false)} onSaved={id => navigate(`/case-review/${project.id}/cases/${id}`)} />}
     {projectForm && <ProjectFormModal project={project} onClose={() => setProjectForm(false)} onSaved={() => { setProjectForm(false); loadProject() }} />}
     {menuOpen && <MobileActionSheet title={project.name} actions={menuActions} onClose={() => setMenuOpen(false)} />}
     <ConfirmDialog open={confirmDelete} danger title="删除项目" message={`删除「${project.name}」会同时删除其中全部病历、PDF、批注、结论和每日汇报，无法恢复。`} confirmText="删除" onConfirm={removeProject} onCancel={() => setConfirmDelete(false)} />

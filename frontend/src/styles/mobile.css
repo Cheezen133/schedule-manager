@@ -73,7 +73,7 @@ body:has(.m-layout) { background: var(--ios-bg); }
 .m-layout .m-search .ui-search-field input:not([type="checkbox"]):not([type="radio"]) { min-height: 36px; padding: 0 4px; background: transparent; color: var(--ios-label); }
 
 /* ----- 底部标签栏 ----- */
-.m-tabbar { position: fixed; right: 0; bottom: 0; left: 0; z-index: 45; display: grid; grid-template-columns: repeat(5, 1fr); padding-bottom: env(safe-area-inset-bottom); background: var(--ios-material); border-top: 0.5px solid var(--ios-separator); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); }
+.m-tabbar { position: fixed; right: 0; bottom: 0; left: 0; z-index: 45; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; padding-bottom: env(safe-area-inset-bottom); background: var(--ios-material); border-top: 0.5px solid var(--ios-separator); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); }
 .m-layout .m-tabbar a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; height: 49px; padding-top: 2px; color: var(--ios-gray); font-size: 10px; font-weight: 500; letter-spacing: 0.01em; }
 .m-layout .m-tabbar a.active { color: var(--ios-tint); }
 .m-tab-icon { position: relative; display: block; width: 28px; height: 28px; }
@@ -333,6 +333,12 @@ body:has(.m-layout) { background: var(--ios-bg); }
 .m-layout .chat-input-row .chat-input-media-btn { flex: none; min-height: 36px; padding: 0 4px; border: 0; background: none; font-size: 22px; }
 .m-layout .chat-input-row .chat-input-text:not([type="checkbox"]):not([type="radio"]) { flex: 1; min-width: 0; min-height: 36px; padding: 0 14px; border: 0.5px solid #c7c7cc; border-radius: 18px; background: #fff; box-shadow: none; }
 .m-layout .chat-input-row .btn-submit { flex: none; min-height: 34px; padding: 0 14px; border-radius: 17px; background: var(--ios-tint); font-size: 16px; font-weight: 600; }
+
+/* ----- 「通知」标签下的分段切换：通知／待审核 ----- */
+.m-notice-tabs { display: grid; grid-template-columns: 1fr 1fr; margin-bottom: 14px; padding: 2px; border-radius: 9px; background: var(--ios-fill); }
+.m-layout .m-notice-tabs a { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 0; border-radius: 7px; color: var(--ios-label); font-size: 13px; font-weight: 500; }
+.m-layout .m-notice-tabs a.is-active { background: #fff; box-shadow: 0 3px 8px rgba(0, 0, 0, .12), 0 3px 1px rgba(0, 0, 0, .04); }
+.m-notice-count { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--ios-red); color: #fff; font-size: 12px; line-height: 18px; text-align: center; }
 
 /* ----- 「我的」入口的角标 ----- */
 .m-cell-badge { flex: none; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--ios-red); color: #fff; font-size: 13px; line-height: 20px; text-align: center; }

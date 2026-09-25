@@ -12,7 +12,9 @@ export const createReviewProject = values => apiClient.post(`${base}/projects`, 
 export const getReviewProject = projectId => apiClient.get(`${base}/projects/${projectId}`).then(data)
 export const updateReviewProject = (projectId, values) => apiClient.put(`${base}/projects/${projectId}`, values)
 export const deleteReviewProject = projectId => apiClient.delete(`${base}/projects/${projectId}`)
-export const addReviewMember = (projectId, userId) => apiClient.post(`${base}/projects/${projectId}/members`, { user_id: userId })
+export const addReviewMember = (projectId, userId, roles) => apiClient.post(`${base}/projects/${projectId}/members`, { user_id: userId, roles })
+// roles：身份列表（可多选）；permissions：逐项调整后的权限列表，传 null 表示按身份默认
+export const updateReviewMember = (projectId, userId, roles, permissions) => apiClient.put(`${base}/projects/${projectId}/members/${userId}`, { roles, permissions })
 export const removeReviewMember = (projectId, userId) => apiClient.delete(`${base}/projects/${projectId}/members/${userId}`)
 
 export const listReviewCases = (projectId, params) => apiClient.get(`${base}/projects/${projectId}/cases`, { params }).then(data)
@@ -34,6 +36,14 @@ export const fetchCaseFile = (fileId, onProgress) => apiClient.get(`${base}/file
 
 export const listAnnotations = fileId => apiClient.get(`${base}/files/${fileId}/annotations`).then(data)
 export const createAnnotation = (fileId, values) => apiClient.post(`${base}/files/${fileId}/annotations`, values).then(data)
+// 语音批注：位置信息加录音文件一起上传，文字可以为空
+export function createVoiceAnnotation(fileId, values, audio, filename) {
+  const form = new FormData()
+  Object.entries(values).forEach(([key, value]) => { if (value != null && value !== '') form.append(key, value) })
+  form.append('audio', audio, filename)
+  return apiClient.post(`${base}/files/${fileId}/annotations/voice`, form, NO_TIMEOUT).then(data)
+}
+export const annotationAudioUrl = annotationId => `/api/v1${base}/annotations/${annotationId}/audio`
 export const updateAnnotation = (annotationId, content) => apiClient.put(`${base}/annotations/${annotationId}`, { content })
 export const deleteAnnotation = annotationId => apiClient.delete(`${base}/annotations/${annotationId}`)
 

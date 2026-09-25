@@ -182,6 +182,36 @@
 .cr-member-name small { color: var(--gray-500); font-size: .78rem; }
 .cr-member-list .btn-secondary { margin: 0; }
 
+/* 语音：语音转文字、录音、播放 */
+.cr-voice-tools { display: flex; flex-wrap: wrap; gap: .5rem; }
+.cr-voice-button { border: 1px solid var(--gray-300); background: white; color: var(--gray-700); border-radius: 999px; padding: .3rem .8rem; font: inherit; font-size: .85rem; cursor: pointer; }
+.cr-voice-button.is-active { border-color: #dc2626; background: #dc2626; color: white; }
+.cr-recorder { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; font-size: .88rem; }
+.cr-recorder audio { max-width: 100%; height: 36px; }
+.cr-recording-dot { width: .6rem; height: .6rem; border-radius: 50%; background: #dc2626; animation: cr-blink 1s infinite; }
+@keyframes cr-blink { 50% { opacity: .25; } }
+.cr-voice-hint { font-size: .82rem; }
+.cr-voice-play { border: 0; background: #eef2ff; color: var(--primary); border-radius: 999px; padding: .25rem .7rem; font: inherit; font-size: .82rem; cursor: pointer; }
+.cr-voice-audio { width: 100%; max-width: 260px; height: 34px; }
+.cr-note-footer { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: 0 .4rem .4rem 2.35rem; }
+.cr-note-footer .cr-note-actions { padding: 0; margin-left: auto; }
+
+/* 成员的身份与权限 */
+.cr-role-tags { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .2rem; }
+.cr-tag-muted { color: var(--gray-500); background: var(--gray-100); }
+.cr-chip-group { display: flex; flex-wrap: wrap; gap: .4rem; }
+.cr-chip-group button { border: 1px solid var(--gray-300); background: white; border-radius: 999px; padding: .3rem .85rem; font: inherit; font-size: .88rem; color: var(--gray-700); cursor: pointer; }
+.cr-chip-group button.is-active { border-color: var(--primary); background: var(--primary); color: white; }
+.cr-permission-list { display: grid; border: 1px solid var(--gray-200); border-radius: 8px; overflow: hidden; }
+.cr-permission { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .55rem .8rem; font-size: .9rem; }
+.cr-permission + .cr-permission { border-top: 1px solid var(--gray-100); }
+/* 仿 iOS 的开关 */
+.cr-permission input[type="checkbox"] { flex: none; position: relative; width: 42px; height: 26px; margin: 0; border-radius: 13px; background: var(--gray-300); -webkit-appearance: none; appearance: none; cursor: pointer; transition: background .2s; }
+.cr-permission input[type="checkbox"]::after { content: ''; position: absolute; top: 2px; left: 2px; width: 22px; height: 22px; border-radius: 50%; background: white; box-shadow: 0 1px 3px rgba(0, 0, 0, .3); transition: transform .2s; }
+.cr-permission input[type="checkbox"]:checked { background: #34c759; }
+.cr-permission input[type="checkbox"]:checked::after { transform: translateX(16px); }
+.cr-member-remove { margin-right: auto; }
+
 @media (max-width: 1100px) {
   .cr-case-body { grid-template-columns: minmax(0, 1fr) 300px; }
 }

@@ -15,12 +15,16 @@ class ReviewProject(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
+# roles：身份，逗号分隔，可多选（manager／reviewer／recorder／viewer）；
+# permissions：实际生效的功能权限，逗号分隔。为空（NULL）时按身份的默认权限算，老数据按录入员算
 class ReviewProjectMember(Base):
     __tablename__ = "review_project_members"
     __table_args__ = (UniqueConstraint("project_id", "user_id", name="uq_review_project_member"),)
     id = Column(Integer, primary_key=True, autoincrement=True)
     project_id = Column(Integer, ForeignKey("review_projects.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id = Column(Integer, nullable=False, index=True)
+    roles = Column(String(100), nullable=True)
+    permissions = Column(String(200), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
@@ -52,7 +56,8 @@ class ReviewCaseFile(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
-# 批注不写进 PDF：位置按页面宽高的比例存（0–1），点注的宽高为 0
+# 批注不写进 PDF：位置按页面宽高的比例存（0–1），点注的宽高为 0。
+# 可附一段语音（audio_*），语音批注的文字可以为空
 class ReviewAnnotation(Base):
     __tablename__ = "review_annotations"
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -64,12 +69,16 @@ class ReviewAnnotation(Base):
     width = Column(Float, nullable=False, default=0)
     height = Column(Float, nullable=False, default=0)
     content = Column(Text, nullable=False)
+    audio_name = Column(String(255), nullable=True)
+    audio_path = Column(String(500), nullable=True)
+    audio_type = Column(String(100), nullable=True)
+    audio_duration = Column(Integer, nullable=True)
     author_id = Column(Integer, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
-# 结论按「病历 × 审阅人」各存一份；decision 取 include / exclude / pending
+# 结论按「病历 × 结论人」各存一份；decision 取 include / exclude / pending。病历状态取最新一份
 class ReviewConclusion(Base):
     __tablename__ = "review_conclusions"
     __table_args__ = (UniqueConstraint("case_id", "reviewer_id", name="uq_review_conclusion"),)

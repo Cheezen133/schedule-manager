@@ -4,6 +4,7 @@ import Header from './Header'
 import Sidebar from './Sidebar'
 import MobileNavBar, { MobileNavProvider } from '../mobile/MobileNavBar'
 import MobileTabBar, { isTabPath } from '../mobile/MobileTabBar'
+import MobileNoticeTabs from '../mobile/MobileNoticeTabs'
 import useIsMobile from '../../hooks/useIsMobile'
 import { getUnreadCount } from '../../api/notifications'
 import { getConversations } from '../../api/chat'
@@ -46,6 +47,7 @@ export default function AppLayout() {
           <div className="main-content">
             <MobileNavBar />
             <main className="page-content m-page">
+              {(location.pathname === '/notifications' || location.pathname === '/review') && <MobileNoticeTabs />}
               <Outlet />
             </main>
           </div>

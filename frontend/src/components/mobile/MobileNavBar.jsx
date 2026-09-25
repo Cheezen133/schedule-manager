@@ -40,7 +40,7 @@ export function useMobileNav({ title, onAdd, addLabel, onToday, rightLabel, onRi
 // 手机端各页面标题（按路由从上到下匹配，取第一个命中的）
 const TITLES = [
   [/^\/$/, '日历'],
-  [/^\/review$/, '待审核'],
+  [/^\/review$/, '通知'],
   [/^\/chat$/, '消息'],
   [/^\/chat\//, '聊天'],
   [/^\/notifications$/, '通知'],

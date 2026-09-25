@@ -78,7 +78,7 @@ function ReportForm({ projectId, report, onClose, onSaved }) {
 }
 
 // 每日汇报：按日期倒序排成时间轴。composerOpen 由父组件控制（手机上点导航栏「＋」打开）
-export default function DailyReports({ projectId, composerOpen, onComposerClose }) {
+export default function DailyReports({ projectId, canWrite, composerOpen, onComposerClose }) {
   const [items, setItems] = useState([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -137,7 +137,7 @@ export default function DailyReports({ projectId, composerOpen, onComposerClose 
   const afterSave = () => { closeForm(); load(items.length + 1) }
 
   return <div className="cr-reports">
-    <div className="cr-reports-head"><p className="cr-muted">每天记录纳入的患者和进展，可附图片或文件。</p><button type="button" className="btn-primary cr-desktop-only" onClick={() => setEditing('new')}>写汇报</button></div>
+    <div className="cr-reports-head"><p className="cr-muted">每天记录纳入的患者和进展，可附图片或文件。</p>{canWrite && <button type="button" className="btn-primary cr-desktop-only" onClick={() => setEditing('new')}>写汇报</button>}</div>
     {error && <div className="error-message">{error}</div>}
     {!loading && !items.length && !error && <div className="empty-state-small">还没有汇报</div>}
     <div className="cr-timeline">

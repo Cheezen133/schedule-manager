@@ -262,5 +262,77 @@ body:has(.m-layout) { background: var(--ios-bg); }
 .m-layout .schedule-form .viewer-selector-list label + label::before { position: absolute; top: 0; right: 0; left: 16px; border-top: 0.5px solid var(--ios-separator); content: ''; }
 .m-layout .schedule-form .viewer-selector-list > span { padding: 11px 16px; }
 
+/* ----- 底部操作菜单（iOS action sheet）----- */
+.m-action-sheet { width: 100%; padding: 0 8px calc(8px + env(safe-area-inset-bottom)); animation: m-slide-up .3s cubic-bezier(.2, .8, .2, 1); }
+.m-action-group { overflow: hidden; margin-bottom: 8px; border-radius: 14px; background: var(--ios-material); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); }
+.m-action-title { padding: 14px 16px; border-bottom: 0.5px solid var(--ios-separator); color: var(--ios-secondary); font-size: 13px; text-align: center; }
+.m-layout .m-action-sheet .m-action { display: block; width: 100%; min-height: 57px; padding: 0 16px; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: var(--ios-tint); font-size: 20px; font-weight: 400; }
+.m-layout .m-action-sheet .m-action + .m-action { border-top: 0.5px solid var(--ios-separator); }
+.m-layout .m-action-sheet .m-action.is-danger { color: var(--ios-red); }
+.m-layout .m-action-sheet .m-action:active { background: rgba(0, 0, 0, 0.08); }
+.m-layout .m-action-sheet .m-action-cancel { border-radius: 14px; background: var(--ios-cell); font-weight: 600; }
+
+/* ----- 长按菜单：手机上固定在屏幕底部，样式同 iOS 操作菜单（原本弹在手指位置，靠近屏幕边缘会超出）----- */
+.m-layout .context-menu { top: auto !important; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom)); left: 8px !important; min-width: 0; padding: 0; overflow: hidden; border: 0; border-radius: 14px; background: var(--ios-material); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); animation: m-slide-up .25s cubic-bezier(.2, .8, .2, 1); }
+.m-layout .context-menu-item { display: flex; align-items: center; justify-content: center; min-height: 52px; padding: 0 16px; border-radius: 0; color: var(--ios-tint); font-size: 18px; }
+.m-layout .context-menu-item + .context-menu-item { border-top: 0.5px solid var(--ios-separator); }
+.m-layout .context-menu-item:hover { background: transparent; }
+.m-layout .context-menu-item:active { background: rgba(0, 0, 0, 0.08); }
+.m-layout .context-menu-item.danger { color: var(--ios-red); }
+.m-layout .context-menu-item.disabled { color: var(--ios-gray); }
+.m-layout .context-menu-divider { height: 6px; margin: 0; background: rgba(60, 60, 67, 0.12); }
+
+/* ----- 弹窗：手机上改成从底部弹出的面板；确认框仍居中（同 iOS 提示框）。弹窗宽度写在行内样式里，需 !important ----- */
+.m-layout .modal-overlay:not(.ui-confirm-overlay) { align-items: flex-end; }
+.m-layout .modal-overlay:not(.ui-confirm-overlay) > .modal { width: 100% !important; max-width: none !important; max-height: 88vh !important; padding-bottom: calc(1.5rem + env(safe-area-inset-bottom)); border-radius: 14px 14px 0 0; animation: m-slide-up .3s cubic-bezier(.2, .8, .2, 1); }
+
+/* ----- 消息（手机端：会话列表 /chat 与聊天窗口 /chat/会话号 分成前后两页）----- */
+.m-layout .chat-page { display: block; height: auto; min-height: 0; }
+.m-layout .chat-page.m-chat-list .chat-main,
+.m-layout .chat-page.m-chat-thread .chat-sidebar,
+.m-layout .chat-page .chat-header { display: none; }
+/* 会话列表：顶部一排快捷按钮（搜索聊天记录、收藏、好友请求），新聊天在导航栏右上角「＋」 */
+.m-layout .chat-page .chat-sidebar { width: auto; border: 0; background: none; }
+.m-layout .chat-sidebar-header { display: block; padding: 0 0 14px; border: 0; }
+.m-layout .chat-sidebar-header h3 { display: none; }
+.m-layout .chat-sidebar-header > div { gap: 8px !important; }
+.m-layout .chat-sidebar-header button { flex: 1; min-height: 34px; padding: 0 6px !important; border: 0; border-radius: 10px; background: var(--ios-cell); box-shadow: none; color: var(--ios-tint); font-size: 14px !important; font-weight: 500; white-space: nowrap; }
+.m-layout .chat-sidebar-header button[title]::after { margin-left: 4px; content: attr(title); }
+.m-layout .chat-sidebar-header .btn-submit { display: none; }
+.m-layout .chat-conv-list { overflow: hidden; border-radius: 10px; background: var(--ios-cell); }
+.m-layout .chat-conv-item { position: relative; gap: 12px; padding: 10px 16px; border: 0; }
+.m-layout .chat-conv-item + .chat-conv-item::before { position: absolute; top: 0; right: 0; left: 76px; border-top: 0.5px solid var(--ios-separator); content: ''; }
+.m-layout .chat-conv-item:active { background: var(--ios-cell-pressed); }
+.m-layout .chat-conv-avatar { position: relative; width: 48px; height: 48px; background: linear-gradient(180deg, #a3a3ab, #85858d); font-size: 20px; }
+.m-layout .chat-conv-name { font-size: 17px; font-weight: 600; }
+.m-layout .chat-conv-preview { margin-top: 2px; color: var(--ios-secondary); font-size: 15px; }
+.m-layout .chat-conv-time { margin-top: 2px; color: var(--ios-secondary); font-size: 14px; }
+/* 聊天窗口：占满导航栏以下整屏（抵消内容区留白），消息区单独滚动，输入栏在底部 */
+.m-layout .chat-page.m-chat-thread { display: flex; flex-direction: column; height: calc(100vh - 44px - env(safe-area-inset-top)); height: calc(100dvh - 44px - env(safe-area-inset-top)); margin: -4px -16px -24px; }
+.m-layout .chat-page.m-chat-thread .chat-main { flex: 1; min-height: 0; background: var(--ios-cell); }
+.m-layout .chat-msg-list { gap: 6px; padding: 12px; }
+.m-layout .chat-msg { gap: 6px; max-width: 82%; }
+.m-layout .chat-msg.mine .chat-msg-avatar { display: none; }
+.m-layout .chat-msg-avatar { width: 28px; height: 28px; background: linear-gradient(180deg, #a3a3ab, #85858d); font-size: 12px; }
+.m-layout .chat-msg-bubble { padding: 7px 12px; border: 0; border-radius: 18px; }
+.m-layout .chat-msg.mine .chat-msg-bubble { border-bottom-right-radius: 6px; background: var(--ios-tint); color: #fff; }
+.m-layout .chat-msg.theirs .chat-msg-bubble { border: 0; border-bottom-left-radius: 6px; background: #e9e9eb; color: var(--ios-label); }
+.m-layout .chat-msg-text { font-size: 17px; line-height: 1.35; }
+/* 发送者名字：自己的不显示，单聊里对方的也不显示（与 iOS 信息一致），群聊显示 */
+.m-layout .chat-msg.mine .chat-msg-sender,
+.m-layout .chat-msg-list:not(.is-group) .chat-msg-sender { display: none; }
+.m-layout .chat-msg.theirs .chat-msg-sender { color: var(--ios-secondary); font-size: 12px; font-weight: 500; opacity: 1; }
+.m-layout .chat-msg-meta { margin-top: 2px; }
+/* 手机没有鼠标悬停：删除、下载按钮常显（网页端悬停才出现） */
+.m-layout .chat-msg-delete { min-height: 0; font-size: 12px; opacity: .6; }
+.m-layout .chat-msg-image,
+.m-layout .chat-msg-video { max-width: 100%; }
+.m-layout .chat-date-sep span { background: none; color: var(--ios-secondary); font-size: 12px; }
+.m-layout .chat-input-area { padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); border-top: 0.5px solid var(--ios-separator); background: var(--ios-material); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); }
+.m-layout .chat-input-row { gap: 4px; }
+.m-layout .chat-input-row .chat-input-media-btn { flex: none; min-height: 36px; padding: 0 4px; border: 0; background: none; font-size: 22px; }
+.m-layout .chat-input-row .chat-input-text:not([type="checkbox"]):not([type="radio"]) { flex: 1; min-width: 0; min-height: 36px; padding: 0 14px; border: 0.5px solid #c7c7cc; border-radius: 18px; background: #fff; box-shadow: none; }
+.m-layout .chat-input-row .btn-submit { flex: none; min-height: 34px; padding: 0 14px; border-radius: 17px; background: var(--ios-tint); font-size: 16px; font-weight: 600; }
+
 @keyframes m-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes m-slide-up { from { transform: translateY(100%); } to { transform: none; } }

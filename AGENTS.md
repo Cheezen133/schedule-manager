@@ -1,6 +1,6 @@
 # AGENTS.md — schedule-manager
 
-日程管理系统（FastAPI 后端 + React 前端）。fork 自 Cheezen133/schedule-manager，现为独立私有仓库，原仓库留作 `upstream` 远端。本文件只做目录，方法和进度在路由表指向的文件里。
+日程管理系统（FastAPI 后端 + React 前端）。fork 自 Cheezen133/schedule-manager，现为独立私有仓库，原仓库留作 `upstream` 远端。正式服务器归原作者：手机端适配做完后交给原作者，由他部署。本文件只做目录，方法和进度在路由表指向的文件里。
 
 <!-- BEGIN DEFAULTS -->
 ## 操作默认
@@ -14,6 +14,7 @@
 - 后端命令一律用 `backend/.venv/bin/python`，依赖只装在这个虚拟环境里。
 - 本地启动后端前确认根目录 `.env` 把 `DATABASE_URL` 指向 SQLite：代码默认连 MySQL，启动时也不会自动建表（缺表会报错并提示跑迁移），README 和 `环境说明.md` 里的相反说法已过时。
 - 提交时不带 `.claude/`：其中 `launch.json` 有指向本机临时目录的测试项。
+- 代码与 `AGENTS.md`、`tasks/` 的改动分开提交：交给原作者时只挑代码提交，这些笔记不随之交出。
 <!-- END DEFAULTS -->
 
 <!-- BEGIN GUARDRAILS -->
@@ -22,7 +23,7 @@
 - 测试和演示只用临时新建的 SQLite 库和测试账号，不拿 `backend/schedule_manager.db`、生产库或用户的真实账号来试。
 - `deploy.sh` 和 `backend/scripts/` 下会改库的脚本（`migrate_database`、`reset_database`、`promote_user`）只在用户明确要求、并确认目标服务器或数据库之后运行；`migrate_database --check` 和对临时测试库的运行除外。
 - `.env.production` 和代码里的密钥、密码不输出到对话、日志或新文件；新增密钥不进 git。
-- 推送、开 PR、合并只在用户明确要求时做；`upstream` 只拉不推，也不向它开 PR。
+- 推送、开 PR、合并只在用户明确要求时做，对 `upstream`（原作者仓库）也一样。
 <!-- END GUARDRAILS -->
 
 <!-- BEGIN ROUTES -->
@@ -37,6 +38,7 @@
 <!-- BEGIN TODOS -->
 ## 零散待办
 
-- `.env.production`（含 JWT 签名密钥）和代码里写死的数据库默认密码都在公开的上游仓库里 → 下一步：用户确认生产环境是否沿用，决定是否轮换。
+- `.env.production`（含 JWT 签名密钥）和代码里写死的数据库默认密码都在公开的上游仓库里 → 下一步：用户告知原作者，由他确认正式服务器是否沿用、要不要轮换。
+- 找回密码只核对用户名和当前昵称，不用登录也没有验证码，而这两项别人都看得到（群成员列表显示 @用户名），任何人都能重置他人密码 → 下一步：用户告知原作者。
 - 日程审核（通过／驳回）请求失败时，桌面和手机界面都没有提示 → 下一步：用户决定是否修。
 <!-- END TODOS -->

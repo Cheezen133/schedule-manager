@@ -5,6 +5,7 @@ import App from './App'
 import { AuthProvider } from './contexts/AuthContext'
 import { notify, ToastViewport } from './components/common/Ui'
 import './styles/index.css'
+import './styles/mobile.css'
 
 window.alert = message => notify(message)
 

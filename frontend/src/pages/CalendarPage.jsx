@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import CalendarView from '../components/calendar/CalendarView'
+import MobileCalendar from '../components/mobile/MobileCalendar'
 import Loading from '../components/common/Loading'
+import useIsMobile from '../hooks/useIsMobile'
 import { getSchedules, exportIcal } from '../api/schedules'
 import { getManagementFriends } from '../api/scheduleManagement'
 import { getBeijingCurrentMonthRange } from '../utils/dateTime'
@@ -25,6 +27,7 @@ export default function CalendarPage() {
     return saved ? parseInt(saved) : null
   })
   const navigate = useNavigate()
+  const isMobile = useIsMobile()
 
   // 持久化选择
   useEffect(() => {
@@ -110,6 +113,23 @@ export default function CalendarPage() {
   const importantCount = schedules.filter((s) => s.is_important).length
 
   if (loading) return <Loading />
+
+  // 手机端：iOS「日历」样式，数据和操作与网页端共用
+  if (isMobile) {
+    return (
+      <MobileCalendar
+        schedules={schedules}
+        error={error}
+        selectedUserId={selectedUserId}
+        managedUsers={managedUsers}
+        onSelectUser={setSelectedUserId}
+        onEventClick={handleEventClick}
+        onCreate={handleDateClick}
+        onExport={handleExport}
+        counts={{ confirmed: confirmedCount, pending: pendingCount, important: importantCount }}
+      />
+    )
+  }
 
   return (
     <div className="calendar-page">

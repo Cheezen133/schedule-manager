@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export default function ContactCopyButton({ phone, name }) {
+export default function ContactCopyButton({ phone, name, label }) {
   const [copied, setCopied] = useState(false)
 
   const handleCopy = async () => {
@@ -23,7 +23,7 @@ export default function ContactCopyButton({ phone, name }) {
 
   return (
     <button className={`copy-btn ${copied ? 'copied' : ''}`} onClick={handleCopy}>
-      {copied ? '已复制!' : `📋 ${name || phone}`}
+      {copied ? '已复制!' : (label || `📋 ${name || phone}`)}
     </button>
   )
 }

@@ -14,6 +14,7 @@ import SearchResultPage from './pages/SearchResultPage'
 import UserManagementPage from './pages/UserManagementPage'
 import RegisterPage from './pages/RegisterPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
+import MobileMePage from './pages/MobileMePage'
 import Loading from './components/common/Loading'
 
 const CalendarPage = lazy(() => import('./pages/CalendarPage'))
@@ -82,6 +83,7 @@ export default function App() {
         <Route path="/contacts" element={lazyPage(<ChatContactsPage />)} />
         <Route path="/phonebook" element={<ContactsPage />} />
         <Route path="/notifications" element={<NotificationPage />} />
+        <Route path="/me" element={<MobileMePage />} />
         <Route path="/search" element={<SearchResultPage />} />
         <Route path="/chat" element={lazyPage(<ChatPage />)} />
         <Route path="/chat/:conversationId" element={lazyPage(<ChatPage />)} />

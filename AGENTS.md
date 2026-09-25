@@ -13,7 +13,7 @@
 - 修后端 bug 先在 `backend/tests/` 写出能复现的测试再修；后端改完跑 `cd backend && .venv/bin/python -m unittest discover -s tests`。
 - 后端命令一律用 `backend/.venv/bin/python`，依赖只装在这个虚拟环境里。
 - 本地启动后端前确认根目录 `.env` 把 `DATABASE_URL` 指向 SQLite：代码默认连 MySQL，启动时也不会自动建表（缺表会报错并提示跑迁移），README 和 `环境说明.md` 里的相反说法已过时。
-- 提交时不带 `.claude/`：其中 `launch.json` 有指向本机临时目录的测试项。
+- 提交时不带 `.claude/`：其中 `launch.json` 有指向本机测试文件夹 `~/schedule-manager-test/` 的测试项。
 - 代码与 `AGENTS.md`、`tasks/` 的改动分开提交：交给原作者时只挑代码提交，这些笔记不随之交出。
 <!-- END DEFAULTS -->
 

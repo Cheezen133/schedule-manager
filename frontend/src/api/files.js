@@ -9,13 +9,14 @@ function apiPath(url) {
   return `${path || '/'}${parsed.search}`
 }
 
-export async function getAuthorizedFileBlob(url) {
-  const response = await apiClient.get(apiPath(url), { responseType: 'blob' })
+// options 会传给 axios，例如大文件用 { timeout: 0 } 取消默认的 15 秒超时
+export async function getAuthorizedFileBlob(url, options = {}) {
+  const response = await apiClient.get(apiPath(url), { responseType: 'blob', ...options })
   return response.data
 }
 
-export async function downloadAuthorizedFile(url, suggestedName = '下载文件') {
-  const blob = await getAuthorizedFileBlob(url)
+export async function downloadAuthorizedFile(url, suggestedName = '下载文件', options = {}) {
+  const blob = await getAuthorizedFileBlob(url, options)
   const objectUrl = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = objectUrl

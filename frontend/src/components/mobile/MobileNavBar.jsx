@@ -16,7 +16,8 @@ export function MobileNavProvider({ children }) {
 
 // 网页端没有 MobileNavProvider，调用不产生任何效果。
 // rightForm：右上角按钮用来提交页面里 id 为该值的表单（按钮在表单外，靠 form 属性关联）
-export function useMobileNav({ title, onAdd, onToday, rightLabel, onRight, rightForm, rightDisabled = false }) {
+// addLabel：「＋」按钮的读屏文字，默认「新建日程」
+export function useMobileNav({ title, onAdd, addLabel, onToday, rightLabel, onRight, rightForm, rightDisabled = false }) {
   const setCustom = useContext(NavSetterContext)
   const { pathname } = useLocation()
   const actions = useRef({})
@@ -28,11 +29,12 @@ export function useMobileNav({ title, onAdd, onToday, rightLabel, onRight, right
       path: pathname,
       title,
       onAdd: hasAdd ? () => actions.current.onAdd() : null,
+      addLabel,
       onToday: hasToday ? () => actions.current.onToday() : null,
       right: rightLabel ? { label: rightLabel, form: rightForm, disabled: rightDisabled, onClick: hasRight ? () => actions.current.onRight() : null } : null,
     })
     return () => setCustom(null)
-  }, [setCustom, pathname, title, hasAdd, hasToday, hasRight, rightLabel, rightForm, rightDisabled])
+  }, [setCustom, pathname, title, hasAdd, addLabel, hasToday, hasRight, rightLabel, rightForm, rightDisabled])
 }
 
 // 手机端各页面标题（按路由从上到下匹配，取第一个命中的）
@@ -62,11 +64,17 @@ const TITLES = [
   [/^\/profile\/memos\/team\/shared-files$/, '群共享文件'],
   [/^\/profile\/memos\/team$/, '团队群聊备忘录'],
   [/^\/profile\/memos$/, '备忘录'],
+  [/^\/case-review\/[^/]+\/cases\//, '病历'],
+  [/^\/case-review\/[^/]+$/, '项目'],
+  [/^\/case-review$/, '病历审阅'],
 ]
 const titleOf = pathname => TITLES.find(([pattern]) => pattern.test(pathname))?.[1] || '日程管理系统'
 
 // 没有站内浏览记录（例如直接打开链接）时，「返回」退到上一级页面
 const parentOf = pathname => {
+  if (/^\/case-review\/[^/]+\/cases\//.test(pathname)) return pathname.replace(/\/cases\/[^/]+$/, '')
+  if (/^\/case-review\/[^/]+$/.test(pathname)) return '/case-review'
+  if (pathname === '/case-review') return '/me'
   const parent = pathname.replace(/\/[^/]+$/, '')
   if (parent.startsWith('/profile/memos') || parent.startsWith('/chat') || /^\/schedules\/[^/]+$/.test(parent)) return parent
   return /^\/(profile|contacts|phonebook|users)/.test(pathname) ? '/me' : '/'
@@ -115,7 +123,7 @@ export default function MobileNavBar() {
         {custom?.right && <button type={custom.right.form ? 'submit' : 'button'} form={custom.right.form || undefined} className={`m-nav-text${custom.right.form ? ' m-nav-strong' : ''}`} disabled={custom.right.disabled} onClick={custom.right.onClick || undefined}>{custom.right.label}</button>}
         {isTab && <button type="button" className="m-nav-icon" aria-label="搜索" onClick={() => setSearchOpen(open => !open)}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="M15.5 15.5L20 20" /></svg></button>}
         {custom?.onAdd
-          ? <button type="button" className="m-nav-icon" aria-label="新建日程" onClick={custom.onAdd}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button>
+          ? <button type="button" className="m-nav-icon" aria-label={custom.addLabel || '新建日程'} onClick={custom.onAdd}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button>
           : pathname === '/' && <Link to="/schedules/new" className="m-nav-icon" aria-label="新建日程"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></Link>}
       </div>
     </header>

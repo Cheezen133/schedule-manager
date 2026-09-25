@@ -334,5 +334,54 @@ body:has(.m-layout) { background: var(--ios-bg); }
 .m-layout .chat-input-row .chat-input-text:not([type="checkbox"]):not([type="radio"]) { flex: 1; min-width: 0; min-height: 36px; padding: 0 14px; border: 0.5px solid #c7c7cc; border-radius: 18px; background: #fff; box-shadow: none; }
 .m-layout .chat-input-row .btn-submit { flex: none; min-height: 34px; padding: 0 14px; border-radius: 17px; background: var(--ios-tint); font-size: 16px; font-weight: 600; }
 
+/* ----- 「我的」入口的角标 ----- */
+.m-cell-badge { flex: none; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--ios-red); color: #fff; font-size: 13px; line-height: 20px; text-align: center; }
+
+/* ----- 病历审阅（列表做成 iOS 分组列表；PDF 全屏阅读，工具栏在底部）----- */
+.m-layout .cr-desktop-only { display: none; }
+.m-layout .cr-project-list, .m-layout .cr-case-list, .m-layout .cr-members > .cr-member-list { display: block; overflow: hidden; border-radius: 10px; background: var(--ios-cell); }
+.m-layout .cr-project-card, .m-layout .cr-case-row, .m-layout .cr-members > .cr-member-list li { position: relative; align-items: center; min-height: 44px; padding: 11px 16px; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+.m-layout .cr-project-card:active, .m-layout .cr-case-row:active { background: var(--ios-cell-pressed); }
+.m-layout .cr-project-card + .cr-project-card::before, .m-layout .cr-case-row + .cr-case-row::before, .m-layout .cr-members > .cr-member-list li + li::before { position: absolute; top: 0; right: 0; left: 16px; border-top: 0.5px solid var(--ios-separator); content: ''; }
+.m-layout .cr-project-main small, .m-layout .cr-case-meta { color: var(--ios-secondary); font-size: 13px; }
+.m-layout .cr-tabs { display: grid; grid-template-columns: repeat(3, 1fr); width: 100%; padding: 2px; border-radius: 9px; background: var(--ios-fill); }
+.m-layout .cr-tabs button { padding: 6px 0; border-radius: 7px; font-size: 13px; }
+.m-layout .cr-case-toolbar { flex-direction: column; align-items: stretch; }
+.m-layout .cr-status-filter { flex-wrap: nowrap; overflow-x: auto; margin: 0 -16px; padding: 0 16px; scrollbar-width: none; }
+.m-layout .cr-status-filter button { flex: none; }
+/* 全局输入框规则优先级是 (0,4,1)，这里带上元素和 :not 才能盖过 */
+.m-layout .cr-cases input.cr-case-search:not([type="checkbox"]):not([type="radio"]) { max-width: none; min-height: 36px; border: 0; border-radius: 10px; background: var(--ios-fill); }
+/* 「上传 PDF」做成 iOS 蓝色文字按钮 */
+.m-layout .cr-upload { padding: 0 16px; border: 0; background: none; color: var(--ios-tint); font-size: 15px; }
+/* 弹出面板里顶部已有「关闭／取消」，底部只留主按钮并铺满 */
+.m-layout .cr-modal .modal-actions .btn-secondary { display: none; }
+.m-layout .cr-modal .modal-actions .btn-primary { flex: 1; margin: 0; }
+.m-layout .cr-segmented button { border-radius: 0; }
+.m-layout .cr-file-more { flex: none; padding: 8px 12px; font-size: 18px; letter-spacing: 1px; }
+.m-layout .cr-reports-head { margin-bottom: 12px; }
+.m-layout .cr-report { border: 0; border-radius: 10px; }
+.m-layout .cr-report-images { grid-template-columns: repeat(3, 1fr); max-width: none; }
+.m-layout .cr-section-title { margin: 0 16px 6px; color: var(--ios-secondary); font-size: 13px; font-weight: 400; }
+.m-layout .cr-section-head { margin: 0 0 6px; }
+.m-layout .cr-section-head .cr-section-title { margin-bottom: 0; }
+.m-layout .cr-case-mobile .cr-panel { margin-bottom: 24px; border: 0; border-radius: 10px; }
+.m-layout .cr-delete-case { display: block; width: 100%; min-height: 44px; margin-bottom: 24px; border: 0; border-radius: 10px; background: var(--ios-cell); color: var(--ios-red); font-size: 17px; }
+/* 全屏阅读器：盖住导航栏和标签栏；工具栏固定两行在底部 */
+.cr-viewer-full { position: fixed; inset: 0; z-index: 200; display: flex; flex-direction: column; padding-top: env(safe-area-inset-top); background: #525659; }
+.cr-viewer-top { display: flex; flex: none; align-items: center; gap: 8px; height: 44px; padding: 0 8px; background: var(--ios-material); font-size: 15px; }
+.cr-viewer-top button { flex: none; border: 0; background: transparent; color: var(--ios-tint); font-size: 17px; }
+.cr-viewer-top span { flex: 1; min-width: 0; overflow: hidden; text-align: center; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.cr-viewer-top-spacer { flex: none !important; width: 40px; }
+.cr-viewer-full .cr-viewer { flex: 1; min-height: 0; border-radius: 0; }
+.cr-viewer-full .cr-viewer-scroll { order: 2; flex: 1; height: auto; min-height: 0; padding: 6px 0; }
+.cr-viewer-full .cr-mode-hint { order: 1; }
+.cr-viewer-full .cr-viewer-toolbar { order: 3; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 8px 10px calc(8px + env(safe-area-inset-bottom)); }
+.cr-viewer-full .cr-toolbar-group { justify-content: center; }
+.cr-viewer-full .cr-mode-buttons { margin-left: 0; }
+.cr-viewer-full .cr-viewer-toolbar button { min-height: 32px; font-size: 15px; }
+.cr-note-card { position: absolute; right: 10px; bottom: calc(100px + env(safe-area-inset-bottom)); left: 10px; z-index: 1; max-height: 40vh; overflow-y: auto; padding: 12px 14px; border-radius: 12px; background: #fff; box-shadow: 0 4px 16px rgba(0, 0, 0, .3); }
+.cr-note-card p { margin: 4px 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; }
+.cr-note-card-actions { display: flex; justify-content: flex-end; gap: 4px; }
+
 @keyframes m-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes m-slide-up { from { transform: translateY(100%); } to { transform: none; } }

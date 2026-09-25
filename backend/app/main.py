@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from .config import APP_NAME, APP_VERSION, CORS_ORIGINS
 from .database import init_db
-from .routers import auth, schedules, export, categories, attachments, messages, notifications, search, dashboard, users, chat, schedule_management, memos
+from .routers import auth, schedules, export, categories, attachments, messages, notifications, search, dashboard, users, chat, schedule_management, memos, case_review
 
 
 @asynccontextmanager
@@ -53,6 +53,7 @@ app.include_router(users.router)
 app.include_router(chat.router)
 app.include_router(schedule_management.router)
 app.include_router(memos.router)
+app.include_router(case_review.router)
 
 
 @app.get("/api/v1/health", tags=["健康检查"])

@@ -2,15 +2,20 @@ import { useState, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { getPendingSchedules } from '../../api/schedules'
+import { getCaseReviewSummary } from '../../api/caseReview'
 
 export default function Sidebar({ notificationCount = 0, chatUnreadCount = 0 }) {
   const { isAdmin } = useAuth()
   const location = useLocation()
   const [pendingReviewCount, setPendingReviewCount] = useState(0)
+  const [caseReviewCount, setCaseReviewCount] = useState(0)
   const [profileOpen, setProfileOpen] = useState(location.pathname.startsWith('/profile'))
   const [memosOpen, setMemosOpen] = useState(location.pathname.startsWith('/profile/memos'))
   useEffect(() => {
-    const load = () => getPendingSchedules().then(response => setPendingReviewCount((response.data || []).length)).catch(() => setPendingReviewCount(0))
+    const load = () => {
+      getPendingSchedules().then(response => setPendingReviewCount((response.data || []).length)).catch(() => setPendingReviewCount(0))
+      getCaseReviewSummary().then(summary => setCaseReviewCount(summary.waiting_count)).catch(() => setCaseReviewCount(0))
+    }
     load(); const timer = setInterval(() => { if (document.visibilityState === 'visible') load() }, 30000)
     return () => clearInterval(timer)
   }, [])
@@ -22,7 +27,8 @@ export default function Sidebar({ notificationCount = 0, chatUnreadCount = 0 }) 
     <NavLink to="/" end className={cls}>日历视图</NavLink>
     <NavLink to="/schedules/new" className={cls}>新建日程</NavLink>
     <NavLink to="/review" className={cls}>待审核 {pendingReviewCount > 0 && <span className="badge">{pendingReviewCount > 99 ? '99+' : pendingReviewCount}</span>}</NavLink>
-    <NavLink to="/chat" className={cls}>消息 {chatUnreadCount > 0 && <span className="badge">{chatUnreadCount > 99 ? '99+' : chatUnreadCount}</span>}</NavLink>
+    <NavLink to="/case-review" className={cls}>病历审阅 {caseReviewCount > 0 && <span className="badge">{caseReviewCount > 99 ? '99+' : caseReviewCount}</span>}</NavLink>
+    <NavLink to="/chat" className={cls}>消息{chatUnreadCount > 0 && <span className="badge">{chatUnreadCount > 99 ? '99+' : chatUnreadCount}</span>}</NavLink>
     <NavLink to="/contacts" className={cls}>联系人</NavLink>
     <NavLink to="/phonebook" className={cls}>电话簿</NavLink>
     <NavLink to="/notifications" className={cls}>通知中心 {notificationCount > 0 && <span className="badge">{notificationCount > 99 ? '99+' : notificationCount}</span>}</NavLink>

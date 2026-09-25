@@ -33,6 +33,7 @@
 |---|---|---|
 | 修改 `frontend/src` 下任何页面、组件或样式前 | `tasks/lessons/mobile-ios.md` | `tasks/todo/mobile-ios.md` |
 | 修改后端的权限校验、日程状态流转、审计或删除逻辑前 | `LOGIC_BUG_AUDIT.md` | — |
+| 开发「病历审阅」板块（含每日汇报）前 | `tasks/todo/case-review.md` §已定决策 §设计 | `tasks/todo/case-review.md` |
 <!-- END ROUTES -->
 
 <!-- BEGIN TODOS -->

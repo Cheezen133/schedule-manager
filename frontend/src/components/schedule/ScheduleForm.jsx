@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { getCategories, createCategory, updateCategory, deleteCategory } from '../../api/categories'
 import VoiceInputButton from '../common/VoiceInputButton'
 import { useAuth } from '../../contexts/AuthContext'
+import useIsMobile from '../../hooks/useIsMobile'
+import { useMobileNav } from '../mobile/MobileNavBar'
 import { getOwnerManagers } from '../../api/scheduleManagement'
 import { Button, ConfirmDialog } from '../common/Ui'
 import { beijingInputToUtcIso, toBeijingInputValue } from '../../utils/dateTime'
@@ -43,6 +45,15 @@ export default function ScheduleForm({ initialData, onSubmit, isEditing = false,
   const [categorySaving, setCategorySaving] = useState(false)
   const [categoryError, setCategoryError] = useState('')
   const [pendingCategoryDelete, setPendingCategoryDelete] = useState(null)
+  const isMobile = useIsMobile()
+  const errorRef = useRef(null)
+  const [submitCount, setSubmitCount] = useState(0)
+
+  // 手机端：保存按钮在导航栏右上角；每次提交后若有错误，把错误提示滚到可见位置（同一错误重复出现也滚动）
+  useMobileNav({ rightLabel: loading ? '保存中…' : isEditing ? '保存' : '添加', rightForm: 'schedule-form', rightDisabled: loading })
+  useEffect(() => {
+    if (error && isMobile) errorRef.current?.scrollIntoView({ block: 'center' })
+  }, [error, isMobile, submitCount])
 
   useEffect(() => {
     if (initialData) {
@@ -215,16 +226,16 @@ export default function ScheduleForm({ initialData, onSubmit, isEditing = false,
 
   return (
     <>
-    <form className="schedule-form" onSubmit={handleSubmit}>
+    <form id="schedule-form" className="schedule-form" onSubmit={event => { setSubmitCount(count => count + 1); handleSubmit(event) }}>
       <h2>{isEditing ? '编辑日程' : '新建日程'}</h2>
 
-      {error && <div className="error-message">{error}</div>}
+      {error && <div className="error-message" ref={errorRef}>{error}</div>}
       {viewerNotice && <div className="info-message">{viewerNotice}</div>}
 
-      <div className="form-group form-row full">
+      <div className="form-group form-row full sf-section">
         <div className="form-group" style={{ marginBottom: 0 }}>
           <label>日程标题 *</label>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <div className="sf-input-row" style={{ display: 'flex', gap: '0.5rem' }}>
             <input
               type="text"
               name="title"
@@ -242,9 +253,10 @@ export default function ScheduleForm({ initialData, onSubmit, isEditing = false,
         </div>
       </div>
 
-      <div className="form-row">
+      {isMobile && <div className="sf-heading">时间（北京时间）*</div>}
+      <div className="form-row sf-section sf-times">
         <div className="form-group">
-          <label>开始时间（北京时间）*</label>
+          <label>{isMobile ? '开始' : '开始时间（北京时间）*'}</label>
           <input
             type="datetime-local"
             name="start_time"
@@ -253,7 +265,7 @@ export default function ScheduleForm({ initialData, onSubmit, isEditing = false,
           />
         </div>
         <div className="form-group">
-          <label>结束时间（北京时间）*</label>
+          <label>{isMobile ? '结束' : '结束时间（北京时间）*'}</label>
           <input
             type="datetime-local"
             name="end_time"
@@ -264,7 +276,7 @@ export default function ScheduleForm({ initialData, onSubmit, isEditing = false,
       </div>
 
       {/* 个人分类选择 */}
-        <div className="form-group schedule-category-field">
+        <div className="form-group schedule-category-field sf-section">
           <div className="schedule-category-heading"><label>日程分类</label><button type="button" className="text-button" onClick={() => setCategoryManagerOpen(true)}>管理分类</button></div>
           <select
             name="category_id"
@@ -289,7 +301,7 @@ export default function ScheduleForm({ initialData, onSubmit, isEditing = false,
           <small>当前显示：{scheduleOwnerLabel}的个人分类</small>
         </div>
 
-      <div className="form-group schedule-visibility-picker">
+      <div className="form-group schedule-visibility-picker sf-section">
         <label>观看权限 *</label>
         <p>普通好友不能查看他人日历；只有有效管理者可按此设置查看完整内容。</p>
         <div className="visibility-options">
@@ -300,6 +312,7 @@ export default function ScheduleForm({ initialData, onSubmit, isEditing = false,
         {formData.visibility === 'selected' && <div className="viewer-selector"><label className="viewer-search-label">可查看的管理者<input value={viewerSearch} onChange={event => setViewerSearch(event.target.value)} placeholder="搜索昵称或用户名" /></label><div className="viewer-selector-list">{eligibleManagers.filter(manager => `${manager.nickname || ''}${manager.username || ''}`.toLowerCase().includes(viewerSearch.toLowerCase())).map(manager => <label key={manager.id}><input type="checkbox" checked={formData.viewer_ids.includes(manager.id)} onChange={() => setFormData(previous => ({ ...previous, viewer_ids: previous.viewer_ids.includes(manager.id) ? previous.viewer_ids.filter(id => id !== manager.id) : [...previous.viewer_ids, manager.id] }))} /><span>{manager.nickname || manager.username}</span></label>)}{!eligibleManagers.length && <span>当前没有可选择的有效管理者。</span>}</div></div>}
       </div>
 
+      <div className="sf-switches sf-section">
       <div className="form-check">
         <input
           type="checkbox"
@@ -320,14 +333,15 @@ export default function ScheduleForm({ initialData, onSubmit, isEditing = false,
           onChange={handleChange}
         />
         <label htmlFor="is_important" style={{ color: '#dc2626' }}>
-          标记为重要日程（红色高亮显示）
+          {isMobile ? '重要日程' : '标记为重要日程（红色高亮显示）'}
         </label>
       </div>
+      </div>
 
-      <div className="form-group form-row full">
+      <div className="form-group form-row full sf-section">
         <div className="form-group" style={{ marginBottom: 0 }}>
           <label>详细描述</label>
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
+          <div className="sf-input-row" style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
             <textarea
               name="description"
               value={formData.description}
@@ -351,9 +365,9 @@ export default function ScheduleForm({ initialData, onSubmit, isEditing = false,
         </div>
       </div>
 
-      <fieldset style={{ border: '2px solid #e5e7eb', borderRadius: 'var(--radius)', padding: '1rem', marginBottom: '1rem', background: '#fafafa' }}>
+      <fieldset className="sf-contact" style={{ border: '2px solid #e5e7eb', borderRadius: 'var(--radius)', padding: '1rem', marginBottom: '1rem', background: '#fafafa' }}>
         <legend style={{ fontWeight: 600, padding: '0 0.5rem', fontSize: '0.9rem', color: '#6b7280' }}>
-          📝 备注信息（选填，用于记录客户姓名、电话等）
+          {isMobile ? '客户信息（选填）' : '📝 备注信息（选填，用于记录客户姓名、电话等）'}
         </legend>
         <div className="form-row">
           <div className="form-group">
@@ -381,7 +395,7 @@ export default function ScheduleForm({ initialData, onSubmit, isEditing = false,
         </div>
       </fieldset>
 
-      <div className="form-group">
+      <div className="form-group sf-section sf-color">
         <label>显示颜色</label>
         <input
           type="color"

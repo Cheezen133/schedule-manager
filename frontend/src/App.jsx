@@ -14,6 +14,7 @@ import SearchResultPage from './pages/SearchResultPage'
 import UserManagementPage from './pages/UserManagementPage'
 import RegisterPage from './pages/RegisterPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
+import MobileMePage from './pages/MobileMePage'
 import Loading from './components/common/Loading'
 
 const CalendarPage = lazy(() => import('./pages/CalendarPage'))
@@ -29,6 +30,9 @@ const PatientDetailPage = lazy(() => import('./pages/PatientDetailPage'))
 const ChatPage = lazy(() => import('./pages/ChatPage'))
 const ChatContactsPage = lazy(() => import('./pages/ChatContactsPage'))
 const HelpPage = lazy(() => import('./pages/HelpPage'))
+const CaseReviewHomePage = lazy(() => import('./pages/CaseReviewHomePage'))
+const CaseReviewProjectPage = lazy(() => import('./pages/CaseReviewProjectPage'))
+const CaseReviewCasePage = lazy(() => import('./pages/CaseReviewCasePage'))
 const lazyPage = page => <Suspense fallback={<Loading />}>{page}</Suspense>
 
 export default function App() {
@@ -84,9 +88,13 @@ export default function App() {
         <Route path="/phonebook" element={<ContactsPage />} />
         <Route path="/notifications" element={<NotificationPage />} />
         <Route path="/help" element={lazyPage(<HelpPage />)} />
+        <Route path="/me" element={<MobileMePage />} />
         <Route path="/search" element={<SearchResultPage />} />
         <Route path="/chat" element={lazyPage(<ChatPage />)} />
         <Route path="/chat/:conversationId" element={lazyPage(<ChatPage />)} />
+        <Route path="/case-review" element={lazyPage(<CaseReviewHomePage />)} />
+        <Route path="/case-review/:projectId" element={lazyPage(<CaseReviewProjectPage />)} />
+        <Route path="/case-review/:projectId/cases/:caseId" element={lazyPage(<CaseReviewCasePage />)} />
 
         {/* 用户管理（管理员专属） */}
         <Route

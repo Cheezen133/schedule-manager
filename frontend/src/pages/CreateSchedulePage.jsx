@@ -4,6 +4,8 @@ import ScheduleForm from '../components/schedule/ScheduleForm'
 import { createSchedule } from '../api/schedules'
 import { getManagementFriends } from '../api/scheduleManagement'
 import { useAuth } from '../contexts/AuthContext'
+import useIsMobile from '../hooks/useIsMobile'
+import MobilePickerSheet from '../components/mobile/MobilePickerSheet'
 
 export default function CreateSchedulePage() {
   const [searchParams] = useSearchParams()
@@ -17,6 +19,8 @@ export default function CreateSchedulePage() {
   const [forUserId, setForUserId] = useState(forUserParam ? parseInt(forUserParam) : null)
   const [managedSearch, setManagedSearch] = useState('')
   const [showManagedDropdown, setShowManagedDropdown] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const isMobile = useIsMobile()
   const filteredManagedUsers = managedUsers.filter(u => !managedSearch || u.nickname.includes(managedSearch) || (u.username||'').includes(managedSearch))
 
   useEffect(() => {
@@ -51,8 +55,30 @@ export default function CreateSchedulePage() {
 
   return (
     <div>
+      {/* 手机端：创建对象显示为一行，点开从底部弹出选择面板 */}
+      {isMobile && <>
+        <section className="m-list">
+          <button type="button" className="m-cell m-kv" onClick={() => setPickerOpen(true)}>
+            <span>创建对象</span>
+            <span className="m-kv-value">{forUserId ? `${managedUser?.nickname || '已授权用户'} 的日程` : '我的日程'}</span>
+            <svg className="m-chevron" viewBox="0 0 8 14" aria-hidden="true"><path d="M1 1l6 6-6 6" /></svg>
+          </button>
+        </section>
+        {pickerOpen && <MobilePickerSheet
+          title="选择创建对象"
+          searchPlaceholder="搜索可管理的好友"
+          options={[
+            ...(readerNeedsManagedOwner ? [] : [{ id: null, label: '自己', pinned: true }]),
+            ...managedUsers.map(u => ({ id: u.owner_id, label: `${u.nickname} 的日程`, keywords: [u.nickname, u.username] })),
+          ]}
+          selectedId={forUserId}
+          onSelect={id => { setForUserId(id); setPickerOpen(false) }}
+          onClose={() => setPickerOpen(false)}
+        />}
+      </>}
+
       {/* 有效日程管理权限的用户选择器 */}
-      <div className="for-user-selector" style={{ position: 'relative' }}>
+      {!isMobile && <div className="for-user-selector" style={{ position: 'relative' }}>
           <label>👤 创建对象</label>
           <input
             className="search-input managed-search-input"
@@ -87,9 +113,9 @@ export default function CreateSchedulePage() {
               )}
             </div>
           )}
-      </div>
+      </div>}
 
-      {managedUser && (
+      {!isMobile && managedUser && (
         <div className="for-user-banner">
           📝 正在为 <strong>{managedUser.nickname}</strong> 创建日程
           {!readerNeedsManagedOwner && <button className="btn-cancel-sm" onClick={() => setForUserId(null)} style={{ marginLeft: '1rem' }}>

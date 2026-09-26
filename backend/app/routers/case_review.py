@@ -10,7 +10,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -47,6 +47,7 @@ DEFAULT_ROLES = ["recorder"]
 class ProjectIn(BaseModel):
     name: str
     description: str | None = None
+    is_public: bool | None = None  # 演示项目；不传表示不改
 
 class MemberIn(BaseModel):
     user_id: int
@@ -84,7 +85,8 @@ class DailyReportUpdate(BaseModel):
     content: str | None = None
 
 
-# ----- 成员资格：项目成员和系统管理员才能看；不是成员时一律按不存在处理（404），不暴露资源是否存在 -----
+# ----- 成员资格：项目成员和系统管理员才能看，演示项目所有登录用户都能看；看不到时一律按不存在处理（404），不暴露资源是否存在。
+# 演示项目的非成员没有任何权限，写操作都由后面的权限校验挡住 -----
 
 def is_admin(user):
     return user.role == "admin"
@@ -92,38 +94,44 @@ def is_admin(user):
 def member_of(project_id, user_id, db):
     return db.query(ReviewProjectMember).filter_by(project_id=project_id, user_id=user_id).first()
 
-def require_member(project_id, user, db, message):
-    if not (is_admin(user) or member_of(project_id, user.id, db)):
+def is_member(project, user, db):
+    return is_admin(user) or member_of(project.id, user.id, db) is not None
+
+def require_view(project, user, db, message):
+    if not (project.is_public or is_member(project, user, db)):
         raise HTTPException(404, message)
 
 def visible_project(project_id, user, db):
     project = db.get(ReviewProject, project_id)
     if not project:
         raise HTTPException(404, "项目不存在")
-    require_member(project.id, user, db, "项目不存在")
+    require_view(project, user, db, "项目不存在")
     return project
 
 def visible_case(case_id, user, db):
     item = db.get(ReviewCase, case_id)
     if not item:
         raise HTTPException(404, "病历不存在")
-    require_member(item.project_id, user, db, "病历不存在")
-    return item, db.get(ReviewProject, item.project_id)
+    project = db.get(ReviewProject, item.project_id)
+    require_view(project, user, db, "病历不存在")
+    return item, project
 
 def visible_case_file(file_id, user, db):
     item = db.get(ReviewCaseFile, file_id)
     if not item:
         raise HTTPException(404, "文件不存在")
     case = db.get(ReviewCase, item.case_id)
-    require_member(case.project_id, user, db, "文件不存在")
-    return item, case, db.get(ReviewProject, case.project_id)
+    project = db.get(ReviewProject, case.project_id)
+    require_view(project, user, db, "文件不存在")
+    return item, case, project
 
 def visible_report(report_id, user, db):
     item = db.get(ReviewDailyReport, report_id)
     if not item:
         raise HTTPException(404, "汇报不存在")
-    require_member(item.project_id, user, db, "汇报不存在")
-    return item, db.get(ReviewProject, item.project_id)
+    project = db.get(ReviewProject, item.project_id)
+    require_view(project, user, db, "汇报不存在")
+    return item, project
 
 
 # ----- 身份与权限 -----
@@ -309,16 +317,17 @@ def case_file_dict(item, users, note_counts=None):
             "uploaded_by": user_brief(item.uploaded_by, users), "created_at": to_beijing_iso(item.created_at),
             "annotation_count": (note_counts or {}).get(item.id, 0)}
 
-def annotation_dict(item, users, user, can_manage):
+# member：当前用户是否项目成员。作者本人能改自己的批注、汇报，前提是仍是成员（被移出后在演示项目里只能看）
+def annotation_dict(item, users, user, can_manage, member=True):
     return {"id": item.id, "file_id": item.file_id, "page": item.page, "kind": item.kind, "x": item.x, "y": item.y,
             "width": item.width, "height": item.height, "content": item.content, "author": user_brief(item.author_id, users),
             "has_audio": bool(item.audio_path), "audio_duration": item.audio_duration,
-            "can_edit": can_manage or item.author_id == user.id,
+            "can_edit": can_manage or (member and item.author_id == user.id),
             "created_at": to_beijing_iso(item.created_at), "updated_at": to_beijing_iso(item.updated_at)}
 
-def report_dict(item, files, users, user, can_manage):
+def report_dict(item, files, users, user, can_manage, member=True):
     return {"id": item.id, "project_id": item.project_id, "report_date": item.report_date.isoformat(), "content": item.content,
-            "author": user_brief(item.author_id, users), "can_edit": can_manage or item.author_id == user.id,
+            "author": user_brief(item.author_id, users), "can_edit": can_manage or (member and item.author_id == user.id),
             "files": [{"id": f.id, "name": f.name, "content_type": f.content_type, "file_size": f.file_size} for f in files],
             "created_at": to_beijing_iso(item.created_at), "updated_at": to_beijing_iso(item.updated_at)}
 
@@ -338,14 +347,15 @@ def waiting_cases(user, db):
 
 @router.get("/summary")
 def summary(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    project_count = db.query(ReviewProject).count() if is_admin(current_user) else db.query(ReviewProjectMember).filter_by(user_id=current_user.id).count()
-    return {"code": 0, "data": {"waiting_count": waiting_cases(current_user, db).count(), "project_count": project_count}}
+    return {"code": 0, "data": {"waiting_count": waiting_cases(current_user, db).count()}}
 
 @router.get("/projects")
 def list_projects(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """我参与的项目加上所有演示项目（系统管理员看全部）"""
+    joined = {project_id for (project_id,) in db.query(ReviewProjectMember.project_id).filter_by(user_id=current_user.id)}
     query = db.query(ReviewProject)
     if not is_admin(current_user):
-        query = query.join(ReviewProjectMember, ReviewProjectMember.project_id == ReviewProject.id).filter(ReviewProjectMember.user_id == current_user.id)
+        query = query.filter(or_(ReviewProject.id.in_(joined), ReviewProject.is_public.is_(True)))
     projects = query.order_by(ReviewProject.updated_at.desc()).all()
     ids = [item.id for item in projects]
     member_counts = dict(db.query(ReviewProjectMember.project_id, func.count(ReviewProjectMember.id)).filter(ReviewProjectMember.project_id.in_(ids)).group_by(ReviewProjectMember.project_id).all()) if ids else {}
@@ -354,6 +364,7 @@ def list_projects(db: Session = Depends(get_db), current_user: User = Depends(ge
     users = user_map([item.created_by for item in projects], db)
     return {"code": 0, "data": [{
         "id": item.id, "name": item.name, "description": item.description, "created_by": user_brief(item.created_by, users),
+        "is_public": item.is_public, "is_member": is_admin(current_user) or item.id in joined,
         "member_count": member_counts.get(item.id, 0), "case_count": case_counts.get(item.id, 0),
         "waiting_count": waiting.get(item.id, 0), "updated_at": to_beijing_iso(item.updated_at),
     } for item in projects]}
@@ -363,7 +374,7 @@ def create_project(data: ProjectIn, db: Session = Depends(get_db), current_user:
     name = clean_text(data.name, 100)
     if not name:
         raise HTTPException(400, "请填写项目名称")
-    project = ReviewProject(name=name, description=clean_text(data.description, 2000), created_by=current_user.id)
+    project = ReviewProject(name=name, description=clean_text(data.description, 2000), is_public=bool(data.is_public), created_by=current_user.id)
     db.add(project); db.flush()
     db.add(ReviewProjectMember(project_id=project.id, user_id=current_user.id))
     db.commit(); db.refresh(project)
@@ -378,7 +389,9 @@ def get_project(project_id: int, db: Session = Depends(get_db), current_user: Us
     return {"code": 0, "data": {
         "id": project.id, "name": project.name, "description": project.description,
         "created_by": user_brief(project.created_by, users),
+        "is_public": project.is_public, "is_member": is_member(project, current_user, db),
         "my_permissions": ordered(perms), "can_manage": "manage" in perms, "can_delete": can_delete_project(project, current_user),
+        "can_set_public": can_delete_project(project, current_user),
         "members": [member_dict(project, item, users) for item in members],
         "role_options": [{"key": key, "label": label, "permissions": list(defaults)} for key, (label, defaults) in ROLES.items()],
         "permission_options": [{"key": key, "label": label} for key, label in PERMISSIONS.items()],
@@ -394,6 +407,11 @@ def update_project(project_id: int, data: ProjectIn, db: Session = Depends(get_d
         raise HTTPException(400, "请填写项目名称")
     project.name = name
     project.description = clean_text(data.description, 2000)
+    # 设为演示项目会让所有登录用户看到其中全部病历和 PDF，所以只交给创建者或系统管理员
+    if data.is_public is not None and data.is_public != project.is_public:
+        if not can_delete_project(project, current_user):
+            raise HTTPException(403, "只有项目创建者或系统管理员能设置演示项目")
+        project.is_public = data.is_public
     db.commit()
     return {"code": 0}
 
@@ -576,7 +594,7 @@ async def upload_case_files(case_id: int, files: list[UploadFile] = File(...), d
 @router.delete("/files/{file_id}")
 def delete_case_file(file_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     item, case, project = visible_case_file(file_id, current_user, db)
-    if not ("manage" in permissions_of(project, current_user, db) or item.uploaded_by == current_user.id):
+    if not ("manage" in permissions_of(project, current_user, db) or (item.uploaded_by == current_user.id and is_member(project, current_user, db))):
         raise HTTPException(403, "只有上传者或有管理权限的人可以删除文件")
     remove_annotation_audio([item.id], db)
     db.query(ReviewAnnotation).filter_by(file_id=item.id).delete()
@@ -612,9 +630,10 @@ def check_geometry(page, kind, x, y, width, height):
 def list_annotations(file_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     item, _, project = visible_case_file(file_id, current_user, db)
     can_manage = "manage" in permissions_of(project, current_user, db)
+    member = is_member(project, current_user, db)
     notes = db.query(ReviewAnnotation).filter_by(file_id=item.id).order_by(ReviewAnnotation.page, ReviewAnnotation.y, ReviewAnnotation.id).all()
     users = user_map([note.author_id for note in notes], db)
-    return {"code": 0, "data": [annotation_dict(note, users, current_user, can_manage) for note in notes]}
+    return {"code": 0, "data": [annotation_dict(note, users, current_user, can_manage, member) for note in notes]}
 
 @router.post("/files/{file_id}/annotations")
 def create_annotation(file_id: int, data: AnnotationIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -659,7 +678,7 @@ def own_annotation(annotation_id, user, db):
     if not note:
         raise HTTPException(404, "批注不存在")
     _, _, project = visible_case_file(note.file_id, user, db)
-    if not (note.author_id == user.id or "manage" in permissions_of(project, user, db)):
+    if not ((note.author_id == user.id and is_member(project, user, db)) or "manage" in permissions_of(project, user, db)):
         raise HTTPException(403, "只能修改自己的批注")
     return note
 
@@ -712,7 +731,7 @@ def delete_report_rows(report_id, db):
 
 def own_report(report_id, user, db):
     item, project = visible_report(report_id, user, db)
-    if not (item.author_id == user.id or "manage" in permissions_of(project, user, db)):
+    if not ((item.author_id == user.id and is_member(project, user, db)) or "manage" in permissions_of(project, user, db)):
         raise HTTPException(403, "只能修改自己的汇报")
     return item
 
@@ -736,7 +755,8 @@ def list_daily_reports(project_id: int, offset: int = Query(0, ge=0), limit: int
     for item in files:
         by_report.setdefault(item.report_id, []).append(item)
     users = user_map([r.author_id for r in reports], db)
-    return {"code": 0, "data": {"total": total, "items": [report_dict(r, by_report.get(r.id, []), users, current_user, can_manage) for r in reports]}}
+    member = is_member(project, current_user, db)
+    return {"code": 0, "data": {"total": total, "items": [report_dict(r, by_report.get(r.id, []), users, current_user, can_manage, member) for r in reports]}}
 
 @router.post("/projects/{project_id}/daily-reports")
 async def create_daily_report(project_id: int, report_date: str | None = Form(None), content: str | None = Form(None), files: list[UploadFile] | None = File(None), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

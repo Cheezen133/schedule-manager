@@ -1,15 +1,17 @@
 from datetime import datetime, timezone
-from sqlalchemy import BigInteger, Column, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from ..database import Base
 
 
-# 病历审阅板块：病历和每日汇报都归属某个项目，只有项目成员和管理员能看。
+# 病历审阅板块：病历和每日汇报都归属某个项目，只有项目成员和管理员能看；
+# 设为演示项目（is_public）的，所有登录用户都能看，但非成员只能看不能改，开关只有创建者或管理员能动。
 # 指向用户的列不设外键：账号注销后审阅记录仍保留（界面显示为已注销用户），也不会挡住注销。
 class ReviewProject(Base):
     __tablename__ = "review_projects"
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(100), nullable=False)
     description = Column(Text, nullable=True)
+    is_public = Column(Boolean, nullable=False, default=False)
     created_by = Column(Integer, nullable=False, index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

@@ -3,17 +3,19 @@ import { createReviewCase, createReviewProject, updateReviewCase, updateReviewPr
 import { errorText, progressText } from './common'
 import { DictationButton, VoiceRecorder } from './Voice'
 
-// 新建／编辑项目
+// 新建／编辑项目。「演示项目」开关只给创建者（新建时就是自己）和系统管理员
 export function ProjectFormModal({ project, onClose, onSaved }) {
   const [name, setName] = useState(project?.name || '')
   const [description, setDescription] = useState(project?.description || '')
+  const [isPublic, setIsPublic] = useState(Boolean(project?.is_public))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const canSetPublic = !project || project.can_set_public
   const submit = async event => {
     event.preventDefault()
     setSaving(true); setError('')
     try {
-      const values = { name: name.trim(), description: description.trim() || null }
+      const values = { name: name.trim(), description: description.trim() || null, ...(canSetPublic ? { is_public: isPublic } : {}) }
       const result = project ? await updateReviewProject(project.id, values) : await createReviewProject(values)
       onSaved(project ? project.id : result.id)
     } catch (err) {
@@ -27,15 +29,19 @@ export function ProjectFormModal({ project, onClose, onSaved }) {
       {error && <div className="error-message">{error}</div>}
       <label className="cr-field"><span>项目名称</span><input autoFocus required maxLength={100} value={name} onChange={event => setName(event.target.value)} placeholder="例如：炎症升高患者病历审阅" /></label>
       <label className="cr-field"><span>说明（选填）</span><textarea rows={3} value={description} onChange={event => setDescription(event.target.value)} placeholder="审阅范围、要求等" /></label>
+      {canSetPublic && <div className="cr-field">
+        <div className="cr-permission-list"><label className="cr-permission"><span>演示项目：所有人可见</span><input type="checkbox" role="switch" checked={isPublic} onChange={event => setIsPublic(event.target.checked)} /></label></div>
+        <small className="cr-muted">打开后，所有登录用户都能查看其中的全部病历、PDF、批注和汇报，但不能修改。只放演示用的假病历。</small>
+      </div>}
       <div className="modal-actions"><button type="button" className="btn-secondary" onClick={onClose}>取消</button><button className="btn-primary" disabled={saving || !name.trim()}>{saving ? '保存中…' : '保存'}</button></div>
     </form>
   </div>
 }
 
-// 新建／编辑病历；新建时可以顺便选好 PDF 一起上传
-export function CaseFormModal({ projectId, members, reviewCase, onClose, onSaved }) {
+// 新建／编辑病历；新建时可以顺便选好 PDF 一起上传。defaultCode：新建时预填的编号（项目里已有编号的下一个）
+export function CaseFormModal({ projectId, members, reviewCase, defaultCode = '', onClose, onSaved }) {
   const editing = Boolean(reviewCase)
-  const [values, setValues] = useState({ code: reviewCase?.code || '', title: reviewCase?.title || '', note: reviewCase?.note || '', reviewer_id: reviewCase?.reviewer?.id ?? '' })
+  const [values, setValues] = useState({ code: reviewCase?.code || defaultCode, title: reviewCase?.title || '', note: reviewCase?.note || '', reviewer_id: reviewCase?.reviewer?.id ?? '' })
   const [files, setFiles] = useState([])
   const [saving, setSaving] = useState(false)
   const [progress, setProgress] = useState('')

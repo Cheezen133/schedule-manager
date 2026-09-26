@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { caseFileUrl, createAnnotation, createVoiceAnnotation, deleteAnnotation, deleteCaseFile, deleteReviewCase, getReviewCase, getReviewProject, listAnnotations, updateAnnotation, uploadCaseFiles } from '../api/caseReview'
 import { downloadAuthorizedFile } from '../api/files'
@@ -24,6 +24,7 @@ export default function CaseReviewCasePage() {
   const { user } = useAuth()
   const [reviewCase, setReviewCase] = useState(null)
   const [members, setMembers] = useState([])
+  const [reviewerRoleIds, setReviewerRoleIds] = useState([])
   const [error, setError] = useState('')
   const [notes, setNotes] = useState([])
   const [mode, setMode] = useState('view')
@@ -39,8 +40,13 @@ export default function CaseReviewCasePage() {
 
   const loadCase = useCallback(() => getReviewCase(caseId).then(setReviewCase).catch(err => setError(errorText(err, '病历不存在，或你不是项目成员'))), [caseId])
   useEffect(() => { loadCase() }, [loadCase])
-  // 编辑病历时可指派的审阅人：有「下结论」权限的成员
-  useEffect(() => { getReviewProject(projectId).then(project => setMembers(project.members.filter(member => member.permissions.includes('conclude')))).catch(() => {}) }, [projectId])
+  // 编辑病历时可指派的审阅人：有「下结论」权限的成员；身份里有「审阅人」的成员，批注换一种标记形状
+  useEffect(() => {
+    getReviewProject(projectId).then(project => {
+      setMembers(project.members.filter(member => member.permissions.includes('conclude')))
+      setReviewerRoleIds(project.members.filter(member => member.roles.includes('reviewer')).map(member => member.id))
+    }).catch(() => {})
+  }, [projectId])
 
   const files = reviewCase?.files || []
   const fileParam = searchParams.get('file')
@@ -52,6 +58,13 @@ export default function CaseReviewCasePage() {
     setSelectedId(null); setDraft(null); setMode('view')
     loadNotes()
   }, [loadNotes])
+  // 审阅人的批注：作者身份里有「审阅人」，或是这份病历指派的审阅人
+  const assignedReviewerId = reviewCase?.reviewer?.id
+  const markedNotes = useMemo(() => {
+    const ids = new Set(reviewerRoleIds)
+    if (assignedReviewerId) ids.add(assignedReviewerId)
+    return notes.map(note => ({ ...note, byReviewer: ids.has(note.author?.id) }))
+  }, [notes, reviewerRoleIds, assignedReviewerId])
 
   useMobileNav({ title: reviewCase ? `病历 ${reviewCase.code}` : '病历', rightLabel: reviewCase?.can_edit ? '编辑' : null, onRight: () => setEditingCase(true) })
 
@@ -120,7 +133,7 @@ export default function CaseReviewCasePage() {
   if (error) return <div className="memo-page"><BackButton fallback={`/case-review/${projectId}`} /><div className="error-message">{error}</div></div>
   if (!reviewCase) return <div className="memo-page"><div className="cr-muted">加载中…</div></div>
 
-  const selectedNote = notes.find(note => note.id === selectedId)
+  const selectedNote = markedNotes.find(note => note.id === selectedId)
   const canDeleteFile = file => reviewCase.can_manage_project || file.uploaded_by?.id === user?.id
   const toggleMode = next => setMode(mode === next ? 'view' : next)
   const modeButtons = reviewCase.can_annotate && <div className="cr-toolbar-group cr-mode-buttons">
@@ -128,9 +141,9 @@ export default function CaseReviewCasePage() {
     <button type="button" className={mode === 'rect' ? 'is-active' : ''} aria-pressed={mode === 'rect'} onClick={() => toggleMode('rect')}>框选</button>
   </div>
   const toolbarExtra = isMobile ? <>{modeButtons}<div className="cr-toolbar-group"><button type="button" onClick={() => setSheet('notes')}>批注 {notes.length}</button><button type="button" onClick={() => setSheet('conclusion')}>结论</button></div></> : modeButtons
-  const viewer = activeFile && <PdfViewer key={activeFile.id} fileId={activeFile.id} notes={notes} mode={mode} selectedId={selectedId} focusRequest={focusRequest} draft={draft} onSelect={setSelectedId} onDraft={setDraft} toolbarExtra={toolbarExtra} />
+  const viewer = activeFile && <PdfViewer key={activeFile.id} fileId={activeFile.id} notes={markedNotes} mode={mode} selectedId={selectedId} focusRequest={focusRequest} draft={draft} onSelect={setSelectedId} onDraft={setDraft} toolbarExtra={toolbarExtra} />
   const conclusion = <ConclusionPanel key={`${reviewCase.id}-${reviewCase.reviewer?.id}`} reviewCase={reviewCase} currentUserId={user?.id} onSaved={loadCase} />
-  const noteList = <AnnotationList notes={notes} selectedId={selectedId} onSelect={id => { setSheet(null); focusNote(id) }} onEdit={note => { setSheet(null); setEditingNote(note) }} onDelete={note => { setSheet(null); setConfirm({ type: 'note', note }) }} />
+  const noteList = <AnnotationList notes={markedNotes} selectedId={selectedId} onSelect={id => { setSheet(null); focusNote(id) }} onEdit={note => { setSheet(null); setEditingNote(note) }} onDelete={note => { setSheet(null); setConfirm({ type: 'note', note }) }} />
   const uploadButton = reviewCase.can_upload && <label className={`btn-secondary cr-upload${uploadProgress ? ' is-busy' : ''}`}>{uploadProgress ? `上传中 ${uploadProgress}` : '上传 PDF'}<input type="file" accept="application/pdf,.pdf" multiple hidden disabled={Boolean(uploadProgress)} onChange={uploadFiles} /></label>
   const info = <dl className="cr-case-info">
     <div><dt>编号</dt><dd>{reviewCase.code}</dd></div>
@@ -173,7 +186,7 @@ export default function CaseReviewCasePage() {
       <div className="cr-viewer-top"><button type="button" onClick={closeViewer}>关闭</button><span>{activeFile.name}</span><span className="cr-viewer-top-spacer" /></div>
       {viewer}
       {selectedNote && <div className="cr-note-card">
-        <div className="cr-note-meta">第 {selectedNote.page} 页 · {selectedNote.author?.nickname}</div>
+        <div className="cr-note-meta">第 {selectedNote.page} 页 · {selectedNote.author?.nickname}{selectedNote.byReviewer && <> <span className="cr-tag is-reviewer">审阅人</span></>}</div>
         {selectedNote.content && <p>{selectedNote.content}</p>}
         {selectedNote.has_audio && <VoicePlayer key={selectedNote.id} annotationId={selectedNote.id} duration={selectedNote.audio_duration} />}
         <div className="cr-note-card-actions">{selectedNote.can_edit && <><button type="button" className="text-button" onClick={() => setEditingNote(selectedNote)}>修改</button><button type="button" className="text-button cr-danger" onClick={() => setConfirm({ type: 'note', note: selectedNote })}>删除</button></>}<button type="button" className="text-button" onClick={() => setSelectedId(null)}>收起</button></div>

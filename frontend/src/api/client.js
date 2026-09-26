@@ -1,20 +1,45 @@
 import axios from 'axios'
 
-// 模块级 token，不受其他标签页 sessionStorage 覆盖影响
-let _token = sessionStorage.getItem('access_token')
+const TOKEN_KEY = 'access_token'
+const USER_KEY = 'user'
 
-export function setToken(token) {
+// 自动登录优先使用 localStorage；普通登录仅在当前浏览器会话中有效。
+let _persistent = Boolean(localStorage.getItem(TOKEN_KEY))
+let _token = localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY)
+
+function clearStoredAuth() {
+  localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(USER_KEY)
+  sessionStorage.removeItem(TOKEN_KEY)
+  sessionStorage.removeItem(USER_KEY)
+}
+
+export function setToken(token, persistent = false) {
+  clearStoredAuth()
   _token = token
+  _persistent = Boolean(token && persistent)
   if (token) {
-    sessionStorage.setItem('access_token', token)
-  } else {
-    sessionStorage.removeItem('access_token')
-    sessionStorage.removeItem('user')
+    const storage = _persistent ? localStorage : sessionStorage
+    storage.setItem(TOKEN_KEY, token)
   }
 }
 
 export function getToken() {
   return _token
+}
+
+export function getStoredUser() {
+  const storage = _persistent ? localStorage : sessionStorage
+  return storage.getItem(USER_KEY)
+}
+
+export function setStoredUser(user) {
+  const storage = _persistent ? localStorage : sessionStorage
+  if (user) {
+    storage.setItem(USER_KEY, JSON.stringify(user))
+  } else {
+    storage.removeItem(USER_KEY)
+  }
 }
 
 const apiClient = axios.create({
@@ -39,9 +64,7 @@ apiClient.interceptors.response.use(
   (error) => {
     // 401 → 跳转登录
     if (error.response?.status === 401) {
-      _token = null
-      sessionStorage.removeItem('access_token')
-      sessionStorage.removeItem('user')
+      setToken(null)
       if (window.location.pathname !== '/login') {
         window.location.href = '/login'
       }

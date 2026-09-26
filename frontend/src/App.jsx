@@ -28,6 +28,7 @@ const PatientListPage = lazy(() => import('./pages/PatientListPage'))
 const PatientDetailPage = lazy(() => import('./pages/PatientDetailPage'))
 const ChatPage = lazy(() => import('./pages/ChatPage'))
 const ChatContactsPage = lazy(() => import('./pages/ChatContactsPage'))
+const HelpPage = lazy(() => import('./pages/HelpPage'))
 const lazyPage = page => <Suspense fallback={<Loading />}>{page}</Suspense>
 
 export default function App() {
@@ -82,6 +83,7 @@ export default function App() {
         <Route path="/contacts" element={lazyPage(<ChatContactsPage />)} />
         <Route path="/phonebook" element={<ContactsPage />} />
         <Route path="/notifications" element={<NotificationPage />} />
+        <Route path="/help" element={lazyPage(<HelpPage />)} />
         <Route path="/search" element={<SearchResultPage />} />
         <Route path="/chat" element={lazyPage(<ChatPage />)} />
         <Route path="/chat/:conversationId" element={lazyPage(<ChatPage />)} />

@@ -14,6 +14,7 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     username: str = Field(..., min_length=1, max_length=50, description="登录账号")
     password: str = Field(..., min_length=1, max_length=64, description="登录密码")
+    auto_login: bool = Field(False, description="是否在当前浏览器保持登录直到主动退出")
 
 
 class PasswordRecoveryVerifyRequest(BaseModel):

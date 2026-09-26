@@ -26,6 +26,7 @@ export default function Sidebar({ notificationCount = 0, chatUnreadCount = 0 }) 
     <NavLink to="/contacts" className={cls}>联系人</NavLink>
     <NavLink to="/phonebook" className={cls}>电话簿</NavLink>
     <NavLink to="/notifications" className={cls}>通知中心 {notificationCount > 0 && <span className="badge">{notificationCount > 99 ? '99+' : notificationCount}</span>}</NavLink>
+    <NavLink to="/help" className={cls}>使用帮助</NavLink>
     {isAdmin && <NavLink to="/users" className={cls}>用户管理</NavLink>}
   </nav></aside>
 }

@@ -74,7 +74,7 @@ def register_user(db: Session, username: str, password: str, nickname: str, phon
     return user
 
 
-def login_user(db: Session, username: str, password: str) -> dict | None:
+def login_user(db: Session, username: str, password: str, auto_login: bool = False) -> dict | None:
     """
     用户名密码登录
     成功返回 {"access_token": str, "user": User}
@@ -94,11 +94,14 @@ def login_user(db: Session, username: str, password: str) -> dict | None:
         return None
 
     # 生成 JWT
-    token = create_access_token({
-        "sub": str(user.id),
-        "username": user.username or "",
-        "role": user.role,
-    })
+    token = create_access_token(
+        {
+            "sub": str(user.id),
+            "username": user.username or "",
+            "role": user.role,
+        },
+        persistent=auto_login,
+    )
 
     return {"access_token": token, "user": user}
 

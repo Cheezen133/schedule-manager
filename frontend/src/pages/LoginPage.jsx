@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { login } from '../api/auth'
@@ -6,14 +6,19 @@ import { login } from '../api/auth'
 export default function LoginPage() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [autoLogin, setAutoLogin] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const { loginUser } = useAuth()
+  const { user, loginUser } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
 
   const from = location.state?.from?.pathname || '/'
+
+  useEffect(() => {
+    if (user) navigate(from, { replace: true })
+  }, [from, navigate, user])
 
   const handleLogin = async (e) => {
     e.preventDefault()
@@ -30,8 +35,8 @@ export default function LoginPage() {
 
     setLoading(true)
     try {
-      const result = await login(username.trim(), password)
-      loginUser(result.access_token, result.user)
+      const result = await login(username.trim(), password, autoLogin)
+      loginUser(result.access_token, result.user, autoLogin)
       navigate(from, { replace: true })
     } catch (err) {
       setError(err.userMessage ||'登录失败')
@@ -69,6 +74,18 @@ export default function LoginPage() {
               placeholder="请输入密码"
             />
           </div>
+
+          <label className="auto-login-option">
+            <input
+              type="checkbox"
+              checked={autoLogin}
+              onChange={(e) => setAutoLogin(e.target.checked)}
+            />
+            <span>
+              <strong>自动登录</strong>
+              <small>仅建议在个人设备上使用</small>
+            </span>
+          </label>
 
           <button
             type="submit"

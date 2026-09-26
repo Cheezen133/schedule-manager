@@ -43,7 +43,7 @@ async def register(body: RegisterRequest, db: Session = Depends(get_db)):
 @router.post("/login", response_model=LoginResponse, summary="账号密码登录")
 async def login(request: LoginRequest, db: Session = Depends(get_db)):
     """使用用户名和密码登录，返回 JWT Token"""
-    result = login_user(db, request.username, request.password)
+    result = login_user(db, request.username, request.password, request.auto_login)
     if result is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

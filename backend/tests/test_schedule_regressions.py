@@ -14,11 +14,13 @@ from app.models.schedule import Schedule
 from app.models.schedule_management import ScheduleManagementPermission, ScheduleViewer
 from app.models.chat_message import ChatMessage
 from app.models.conversation import Conversation, ConversationMember
+from app.models.friend_request import FriendRequest
 from app.models.shared_file import SharedFile
 from app.models.user import User
 from app.models.verification import AuditLog
 from app.routers.chat import delete_message, search_chat
 from app.routers.export import export_ical
+from app.routers.schedules import list_schedules
 from app.services.schedule_management_service import can_view_schedule
 from app.services.schedule_service import (
     EDIT_SNAPSHOT_ACTION,
@@ -66,6 +68,31 @@ class ScheduleRegressionTests(unittest.TestCase):
         self.db.add(schedule)
         self.db.flush()
         return schedule
+
+    def test_revoked_manager_cannot_open_friend_calendar(self):
+        self.db.add(FriendRequest(
+            sender_id=self.manager.id,
+            receiver_id=self.owner.id,
+            status="accepted",
+        ))
+        self.db.add(ScheduleManagementPermission(
+            owner_id=self.owner.id,
+            requester_id=self.manager.id,
+            status="revoked",
+        ))
+        self.db.commit()
+
+        with self.assertRaises(HTTPException) as context:
+            list_schedules(
+                start_date=None,
+                end_date=None,
+                status_filter=None,
+                created_by=self.owner.id,
+                db=self.db,
+                current_user=self.manager,
+            )
+
+        self.assertEqual(context.exception.status_code, 403)
 
     @patch("app.services.notification_service.create_notification")
     def test_reject_manager_edit_restores_fields_and_viewers(self, _notify):

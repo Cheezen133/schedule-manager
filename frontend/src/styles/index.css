@@ -338,6 +338,36 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
 }
 
+.auto-login-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  margin: -0.25rem 0 1.25rem;
+  color: var(--gray-700);
+  cursor: pointer;
+  user-select: none;
+}
+
+.auto-login-option input {
+  width: 1rem;
+  height: 1rem;
+  margin-top: 0.15rem;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.auto-login-option span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  font-size: 0.875rem;
+}
+
+.auto-login-option small {
+  color: var(--gray-500);
+  font-size: 0.75rem;
+}
+
 .phone-input-row {
   display: flex;
   gap: 0.5rem;
@@ -667,6 +697,31 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
 .chat-contact-unread { position: absolute; top: .65rem; right: .7rem; padding: .12rem .38rem; border-radius: 999px; background: #fee2e2; color: #b91c1c; font-size: .66rem; font-weight: 700; }
 .chat-contact-empty { grid-column: 1 / -1; padding: 4rem 1rem; border: 1px dashed var(--gray-300); border-radius: var(--radius); color: var(--gray-500); background: var(--gray-50); text-align: center; }
 @media (max-width: 680px) { .chat-contact-toolbar { grid-template-columns: 1fr; }.chat-contact-tabs { overflow-x: auto; }.chat-contact-tabs button { flex: 1; white-space: nowrap; }.chat-contacts-header { align-items: center; } }
+
+/* ===== 使用帮助 ===== */
+.help-page { width: 100%; max-width: 1180px; }
+.help-heading { margin-bottom: 1.5rem; }
+.help-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); align-items: start; gap: 1.25rem; }
+.help-catalog { position: sticky; top: 1rem; display: grid; gap: .3rem; padding: 1rem; background: white; border: 1px solid var(--gray-200); border-radius: 12px; box-shadow: var(--shadow); }
+.help-catalog strong { margin-bottom: .35rem; color: var(--gray-800); font-size: .92rem; }
+.help-catalog a { display: flex; align-items: center; gap: .55rem; padding: .55rem .6rem; border-radius: 7px; color: var(--gray-600); font-size: .84rem; }
+.help-catalog a:hover { background: #eef2ff; color: var(--primary); }
+.help-content { display: grid; gap: 1rem; min-width: 0; }
+.help-section { scroll-margin-top: 1rem; padding: 1.25rem; background: white; border: 1px solid var(--gray-200); border-radius: 12px; box-shadow: var(--shadow); }
+.help-section-heading { display: flex; align-items: flex-start; gap: .8rem; padding-bottom: 1rem; border-bottom: 1px solid var(--gray-100); }
+.help-section-heading > span { display: grid; place-items: center; width: 40px; height: 40px; flex: 0 0 auto; border-radius: 10px; background: #eef2ff; font-size: 1.2rem; }
+.help-section-heading h3 { margin: 0 0 .25rem; color: var(--gray-800); font-size: 1.05rem; }
+.help-section-heading p { margin: 0; color: var(--gray-500); font-size: .84rem; }
+.help-document-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem 1.25rem; padding-top: 1rem; }
+.help-document-list article { min-width: 0; }
+.help-document-list h4 { margin: 0 0 .3rem; color: var(--gray-700); font-size: .9rem; }
+.help-document-list p { margin: 0; color: var(--gray-600); font-size: .84rem; line-height: 1.7; }
+.developer-card { border-color: #c7d2fe; background: linear-gradient(135deg, #fff 0%, #f5f3ff 100%); }
+.developer-contact { display: flex; flex-wrap: wrap; gap: 1rem; padding-top: 1rem; }
+.developer-contact > div { display: grid; gap: .2rem; min-width: 180px; padding: .8rem 1rem; border: 1px solid #ddd6fe; border-radius: 9px; background: rgba(255,255,255,.8); }
+.developer-contact small { color: var(--gray-500); }
+.developer-contact strong, .developer-contact a { color: var(--primary); font-size: 1rem; font-weight: 700; }
+@media (max-width: 820px) { .help-layout { grid-template-columns: 1fr; }.help-catalog { position: static; grid-template-columns: repeat(2, minmax(0, 1fr)); }.help-catalog strong { grid-column: 1 / -1; }.help-document-list { grid-template-columns: 1fr; } }
 
 /* ===== 审核页面 ===== */
 .review-page h2 {

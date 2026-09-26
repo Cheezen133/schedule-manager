@@ -14,6 +14,7 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [managedUsers, setManagedUsers] = useState([])
+  const [permissionsLoaded, setPermissionsLoaded] = useState(false)
   const [managedSearch, setManagedSearch] = useState('')
   const [showManagedDropdown, setShowManagedDropdown] = useState(false)
   const filteredManagedUsers = managedUsers.filter(u => !managedSearch || u.nickname.includes(managedSearch) || (u.username||'').includes(managedSearch))
@@ -35,12 +36,30 @@ export default function CalendarPage() {
     }
   }, [selectedUserId])
 
-  // 所有好友都可查看忙碌占位；只有已批准管理者可查看详情和代建日程。
-  useEffect(() => {
-    getManagementFriends().then((res) => {
-      setManagedUsers((res.data || []).map(x => ({ ...x, owner_id: x.id })))
-    }).catch(() => {})
+  const loadManagedUsers = useCallback(async () => {
+    try {
+      const res = await getManagementFriends()
+      const activeUsers = (res.data || [])
+        .filter(x => x.management?.status === 'approved' && x.management?.remaining_seconds > 0)
+        .map(x => ({ ...x, owner_id: x.id }))
+      setManagedUsers(activeUsers)
+      setSelectedUserId(current => current && !activeUsers.some(user => user.owner_id === current) ? null : current)
+    } catch {
+      setManagedUsers([])
+      setSelectedUserId(null)
+    } finally {
+      setPermissionsLoaded(true)
+    }
   }, [])
+
+  // 只有当前有效的日程管理者才能选择并进入好友日历；页面可见时低频同步撤销和过期状态。
+  useEffect(() => {
+    loadManagedUsers()
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') loadManagedUsers()
+    }, 30000)
+    return () => window.clearInterval(timer)
+  }, [loadManagedUsers])
 
   const fetchSchedules = useCallback(async () => {
     try {
@@ -50,16 +69,23 @@ export default function CalendarPage() {
       const result = await getSchedules(params)
       setSchedules(result.data || [])
     } catch (err) {
-      setError('获取日程失败')
+      if (err.response?.status === 403 && selectedUserId) {
+        setSelectedUserId(null)
+        setManagedSearch('')
+        setError('该好友的日程管理权限已失效，已返回我的日程。')
+      } else {
+        setError('获取日程失败')
+      }
     } finally {
       setLoading(false)
     }
   }, [selectedUserId])
 
   useEffect(() => {
+    if (!permissionsLoaded) return
     setLoading(true)
     fetchSchedules()
-  }, [fetchSchedules])
+  }, [fetchSchedules, permissionsLoaded])
 
   const handleEventClick = (eventId) => {
     navigate(`/schedules/${eventId}`)
@@ -143,7 +169,7 @@ export default function CalendarPage() {
                   {filteredManagedUsers.map(u => (
                     <div key={u.owner_id} className={`managed-dropdown-item ${selectedUserId === u.owner_id ? 'active' : ''}`}
                       onMouseDown={(e) => { e.preventDefault(); setSelectedUserId(u.owner_id); setManagedSearch(''); setShowManagedDropdown(false) }}>
-                      <span>{u.management?.status === 'approved' ? '🔗' : '👤'}</span> {u.nickname} 的日程 {u.management?.status === 'approved' ? '（可管理）' : '（仅忙碌）'}
+                      <span>🔗</span> {u.nickname} 的日程（可管理）
                     </div>
                   ))}
                   {filteredManagedUsers.length === 0 && managedSearch && (

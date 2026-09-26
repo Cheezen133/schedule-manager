@@ -6,14 +6,20 @@ from jose import jwt, JWTError
 from ..config import JWT_SECRET_KEY, JWT_ALGORITHM, JWT_EXPIRE_HOURS
 
 
-def create_access_token(data: dict) -> str:
+def create_access_token(data: dict, *, persistent: bool = False) -> str:
     """
     创建 JWT 访问令牌
     data 应包含: sub (user_id), phone, role
     """
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRE_HOURS)
-    to_encode.update({"exp": expire, "iat": datetime.now(timezone.utc)})
+    now = datetime.now(timezone.utc)
+    to_encode.update({
+        "iat": now,
+        "token_type": "access",
+        "auto_login": persistent,
+    })
+    if not persistent:
+        to_encode["exp"] = now + timedelta(hours=JWT_EXPIRE_HOURS)
     encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
     return encoded_jwt
 

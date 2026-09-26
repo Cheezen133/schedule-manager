@@ -11,8 +11,12 @@ export async function register(username, password, nickname, phone) {
 /**
  * 账号密码登录
  */
-export async function login(username, password) {
-  const res = await apiClient.post('/auth/login', { username, password })
+export async function login(username, password, autoLogin = false) {
+  const res = await apiClient.post('/auth/login', {
+    username,
+    password,
+    auto_login: autoLogin,
+  })
   return res.data
 }
 

@@ -9,7 +9,7 @@ from ..models.category import Category
 from ..models.schedule_management import ScheduleViewer
 from ..schemas.schedule import ScheduleCreate, ScheduleUpdate, ReviewAction
 from ..services.schedule_service import create_manager_edit_snapshot, get_schedule_by_id, delete_schedule, toggle_complete, get_external_contacts, _schedule_to_response, approve_schedule, reject_schedule
-from ..services.schedule_management_service import is_effective_manager, is_friend, can_view_schedule, valid_viewers
+from ..services.schedule_management_service import is_effective_manager, can_view_schedule, valid_viewers
 from ..services.notification_service import create_notification
 from ..utils.datetime_utils import parse_client_datetime, to_beijing_iso, to_utc_naive
 
@@ -64,8 +64,8 @@ def notify_owner_review(db, schedule, actor, action_label):
 @router.get("/schedules")
 def list_schedules(start_date: str | None = Query(None), end_date: str | None = Query(None), status_filter: str | None = Query(None, alias="status"), created_by: int | None = Query(None), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     owner_id = created_by if created_by is not None else current_user.id
-    if owner_id != current_user.id and not (is_effective_manager(db, current_user.id, owner_id) or is_friend(db, current_user.id, owner_id)):
-        raise HTTPException(403, "Only friends can view this calendar")
+    if owner_id != current_user.id and not is_effective_manager(db, current_user.id, owner_id):
+        raise HTTPException(403, "Management permission is missing or expired")
     query = db.query(Schedule).filter(Schedule.created_by == owner_id)
     if start_date: query = query.filter(Schedule.end_time >= parse_client_datetime(start_date))
     if end_date: query = query.filter(Schedule.start_time <= parse_client_datetime(end_date, end_of_day=True))

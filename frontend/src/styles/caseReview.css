@@ -31,7 +31,8 @@
 .cr-project-main small { color: var(--gray-500); }
 .cr-waiting-badge { flex: none; background: var(--danger); color: white; font-size: .75rem; border-radius: 999px; padding: .15rem .55rem; }
 
-/* 项目页：分栏、筛选、病历列表 */
+/* 项目页：非成员看演示项目时的只读提示、分栏、筛选、病历列表 */
+.cr-readonly-banner { margin-bottom: .9rem; padding: .6rem .9rem; border-radius: 8px; background: #eff6ff; color: #1d4ed8; font-size: .88rem; }
 .cr-tabs { display: inline-flex; gap: .25rem; padding: .25rem; margin-bottom: 1rem; background: var(--gray-100); border-radius: 8px; }
 .cr-tabs button { border: 0; background: transparent; padding: .4rem 1rem; border-radius: 6px; color: var(--gray-600); font: inherit; cursor: pointer; }
 .cr-tabs button.is-active { background: white; color: var(--gray-900); box-shadow: var(--shadow); }
@@ -53,6 +54,29 @@
 .cr-case-title span { color: var(--gray-600); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cr-case-meta, .cr-case-diagnosis { font-size: .82rem; color: var(--gray-500); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cr-case-diagnosis { color: var(--gray-700); }
+
+/* 批量导入：工具栏按钮、说明、预览列表、进度条 */
+.cr-case-toolbar .cr-batch-button { width: auto; margin-left: auto; padding: .5rem 1.1rem; }
+.cr-case-toolbar .cr-batch-button + .btn-primary { margin-left: 0; }
+.cr-batch { width: 560px; }
+.cr-batch p { margin: 0; line-height: 1.6; }
+.cr-batch-intro, .cr-batch-progress, .cr-batch-result { display: grid; gap: .6rem; }
+.cr-batch-pickers { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: .3rem; }
+.cr-batch-pickers button { width: auto; padding: .55rem 1.1rem; }
+.cr-batch-summary { color: var(--gray-700); }
+.cr-batch .modal-actions .text-button { flex: none; white-space: nowrap; }
+.cr-batch-list { display: grid; gap: .4rem; max-height: 45vh; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.cr-batch-list > li { display: flex; align-items: flex-start; gap: .6rem; padding: .55rem .7rem; border: 1px solid var(--gray-200); border-radius: 8px; }
+.cr-batch-list > li.is-off { opacity: .55; }
+.cr-batch-list > li > input[type="checkbox"] { flex: none; margin-top: .75rem; }
+.cr-batch-row { flex: 1; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .3rem .6rem; }
+.cr-batch-status { font-size: .82rem; color: var(--gray-500); white-space: nowrap; }
+.cr-batch-row details { grid-column: 1 / -1; font-size: .82rem; color: var(--gray-500); }
+.cr-batch-row summary { cursor: pointer; }
+.cr-batch-row details ul { margin: .3rem 0 0; padding-left: 1.1rem; overflow-wrap: anywhere; }
+.cr-batch-bar { height: 8px; overflow: hidden; border-radius: 999px; background: var(--gray-100); }
+.cr-batch-bar span { display: block; height: 100%; background: var(--primary); transition: width .2s; }
+.cr-batch-failures { max-height: 30vh; margin: 0; padding-left: 1.1rem; overflow-y: auto; color: var(--danger); font-size: .85rem; }
 
 /* 病历页：左边 PDF，右边结论、批注、信息、文件 */
 .cr-case-body { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 1rem; align-items: start; }
@@ -138,10 +162,14 @@
 .cr-mode-point { cursor: crosshair; }
 .cr-mode-rect { cursor: crosshair; touch-action: none; user-select: none; -webkit-user-select: none; }
 .cr-note-pin { position: absolute; transform: translate(-50%, -50%); width: 1.6rem; height: 1.6rem; border: 2px solid white; border-radius: 50%; background: #f59e0b; color: white; font-size: .72rem; font-weight: 700; display: grid; place-items: center; box-shadow: 0 1px 3px rgba(0, 0, 0, .4); cursor: pointer; padding: 0; }
-.cr-note-rect { position: absolute; border: 2px solid #f59e0b; background: rgba(245, 158, 11, .15); padding: 0; cursor: pointer; }
+.cr-note-rect { position: absolute; border: 2px dashed #f59e0b; background: rgba(245, 158, 11, .15); padding: 0; cursor: pointer; }
 .cr-note-rect span { position: absolute; top: -.8rem; left: -.8rem; width: 1.4rem; height: 1.4rem; border-radius: 50%; background: #f59e0b; color: white; font-size: .7rem; font-weight: 700; display: grid; place-items: center; border: 2px solid white; }
-.cr-note-pin.is-selected, .cr-note-rect.is-selected span { background: #dc2626; }
-.cr-note-rect.is-selected { border-color: #dc2626; background: rgba(220, 38, 38, .12); }
+/* 审阅人（身份含「审阅人」，或是这份病历指派的审阅人）的批注：红色方块、红色实线框；其他人：橙色圆点、橙色虚线框。选中的加一圈外框 */
+.cr-note-pin.is-reviewer, .cr-note-rect.is-reviewer span, .cr-note-number.is-reviewer { border-radius: 4px; background: #dc2626; }
+.cr-note-rect.is-reviewer { border-style: solid; border-color: #dc2626; background: rgba(220, 38, 38, .1); }
+.cr-note-pin.is-selected, .cr-note-rect.is-selected span { z-index: 2; box-shadow: 0 0 0 3px var(--primary); }
+.cr-note-rect.is-selected { z-index: 1; box-shadow: 0 0 0 2px var(--primary); }
+.cr-tag.is-reviewer { color: #b91c1c; background: #fef2f2; }
 .is-draft { pointer-events: none; border-style: dashed; background-color: rgba(79, 70, 229, .15); border-color: var(--primary); }
 .cr-note-pin.is-draft { background: var(--primary); }
 

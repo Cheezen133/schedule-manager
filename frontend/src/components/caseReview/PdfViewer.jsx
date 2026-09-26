@@ -90,9 +90,14 @@ function PdfPage({ page, pageNumber, width, scrollRoot, notes, numbers, mode, se
   return <div className="cr-page" ref={wrapRef} data-page={pageNumber} style={{ width, height }}>
     <canvas ref={canvasRef} style={{ width, height }} />
     <div ref={overlayRef} className={`cr-page-overlay cr-mode-${mode}`} onClick={handleClick} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerCancel={() => setDrawing(null)}>
-      {notes.map(note => note.kind === 'rect'
-        ? <button type="button" key={note.id} id={`cr-note-${note.id}`} className={`cr-note-rect${note.id === selectedId ? ' is-selected' : ''}`} style={boxStyle(note)} onClick={selectNote(note.id)} onPointerDown={stop} aria-label={`批注 ${numbers[note.id]}`}><span>{numbers[note.id]}</span></button>
-        : <button type="button" key={note.id} id={`cr-note-${note.id}`} className={`cr-note-pin${note.id === selectedId ? ' is-selected' : ''}`} style={{ left: percent(note.x), top: percent(note.y) }} onClick={selectNote(note.id)} onPointerDown={stop} aria-label={`批注 ${numbers[note.id]}`}>{numbers[note.id]}</button>)}
+      {notes.map(note => {
+        // 审阅人的批注用另一种形状（见 caseReview.css）
+        const state = `${note.byReviewer ? ' is-reviewer' : ''}${note.id === selectedId ? ' is-selected' : ''}`
+        const label = `批注 ${numbers[note.id]}${note.byReviewer ? '（审阅人）' : ''}`
+        return note.kind === 'rect'
+          ? <button type="button" key={note.id} id={`cr-note-${note.id}`} className={`cr-note-rect${state}`} style={boxStyle(note)} onClick={selectNote(note.id)} onPointerDown={stop} aria-label={label}><span>{numbers[note.id]}</span></button>
+          : <button type="button" key={note.id} id={`cr-note-${note.id}`} className={`cr-note-pin${state}`} style={{ left: percent(note.x), top: percent(note.y) }} onClick={selectNote(note.id)} onPointerDown={stop} aria-label={label}>{numbers[note.id]}</button>
+      })}
       {draft?.page === pageNumber && (draft.kind === 'rect'
         ? <div className="cr-note-rect is-draft" style={boxStyle(draft)} />
         : <div className="cr-note-pin is-draft" style={{ left: percent(draft.x), top: percent(draft.y) }}>＋</div>)}

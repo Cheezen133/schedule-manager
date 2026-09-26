@@ -6,7 +6,7 @@ import { errorText } from '../components/caseReview/common'
 import { useMobileNav } from '../components/mobile/MobileNavBar'
 import useIsMobile from '../hooks/useIsMobile'
 
-// 病历审阅首页：我参与的项目（管理员可看到全部项目）
+// 病历审阅首页：我参与的项目和所有演示项目（管理员可看到全部项目）
 export default function CaseReviewHomePage() {
   const isMobile = useIsMobile()
   const navigate = useNavigate()
@@ -27,7 +27,7 @@ export default function CaseReviewHomePage() {
     {projects && !projects.length && <div className="empty-state cr-empty">还没有项目。新建一个项目，把审阅人加为成员后，就可以上传病历了。</div>}
     {projects?.length > 0 && <div className="cr-project-list">
       {projects.map(project => <Link key={project.id} to={`/case-review/${project.id}`} className="cr-project-card">
-        <div className="cr-project-main"><strong>{project.name}</strong>{project.description && <p>{project.description}</p>}<small>{meta(project)}</small></div>
+        <div className="cr-project-main"><strong>{project.name}{project.is_public && <> <span className="cr-tag">演示</span></>}{!project.is_member && <> <span className="cr-tag cr-tag-muted">只读</span></>}</strong>{project.description && <p>{project.description}</p>}<small>{meta(project)}</small></div>
         {project.waiting_count > 0 && <span className="cr-waiting-badge" title="指派给我、尚未审阅">待我审阅 {project.waiting_count}</span>}
       </Link>)}
     </div>}

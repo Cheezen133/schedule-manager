@@ -71,8 +71,8 @@ export function AnnotationList({ notes, selectedId, onSelect, onEdit, onDelete }
   return <ol className="cr-note-list" ref={listRef}>
     {notes.map((note, index) => <li key={note.id} data-note={note.id} className={note.id === selectedId ? 'is-selected' : ''}>
       <button type="button" className="cr-note-item" onClick={() => onSelect(note.id)}>
-        <span className="cr-note-number">{index + 1}</span>
-        <span className="cr-note-body"><span className="cr-note-meta">第 {note.page} 页 · {note.author?.nickname} · {formatBeijingDateTime(note.created_at, { includeYear: false })}</span>{note.content && <span className="cr-note-text">{note.content}</span>}</span>
+        <span className={`cr-note-number${note.byReviewer ? ' is-reviewer' : ''}`}>{index + 1}</span>
+        <span className="cr-note-body"><span className="cr-note-meta">第 {note.page} 页 · {note.author?.nickname}{note.byReviewer && <> <span className="cr-tag is-reviewer">审阅人</span></>} · {formatBeijingDateTime(note.created_at, { includeYear: false })}</span>{note.content && <span className="cr-note-text">{note.content}</span>}</span>
       </button>
       {(note.has_audio || note.can_edit) && <div className="cr-note-footer">
         {note.has_audio && <VoicePlayer annotationId={note.id} duration={note.audio_duration} />}

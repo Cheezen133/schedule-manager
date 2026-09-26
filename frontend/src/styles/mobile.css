@@ -362,6 +362,11 @@ body:has(.m-layout) { background: var(--ios-bg); }
 /* 弹出面板里顶部已有「关闭／取消」，底部只留主按钮并铺满 */
 .m-layout .cr-modal .modal-actions .btn-secondary { display: none; }
 .m-layout .cr-modal .modal-actions .btn-primary { flex: 1; margin: 0; }
+/* 批量导入：选文件按钮铺满，预览列表做成带分隔线的分组列表 */
+.m-layout .cr-batch-pickers .btn-primary { flex: 1; }
+.m-layout .cr-batch-list { display: block; border-radius: 10px; background: var(--ios-bg); }
+.m-layout .cr-batch-list > li { position: relative; padding: 10px 12px; border: 0; border-radius: 0; }
+.m-layout .cr-batch-list > li + li::before { position: absolute; top: 0; right: 0; left: 12px; border-top: 0.5px solid var(--ios-separator); content: ''; }
 .m-layout .cr-segmented button { border-radius: 0; }
 .m-layout .cr-file-more { flex: none; padding: 8px 12px; font-size: 18px; letter-spacing: 1px; }
 .m-layout .cr-reports-head { margin-bottom: 12px; }

@@ -4,10 +4,10 @@ import { getPendingSchedules } from '../../api/schedules'
 import { getCaseReviewSummary } from '../../api/caseReview'
 
 // 手机端底部标签栏：常用入口，其余功能收进「我的」。
-// 「病历审阅」只给参与了审阅项目的人显示（optional）；「待审核」属于通知，并入「通知」标签（also）
+// 「待审核」属于通知，并入「通知」标签（also）
 const TABS = [
   { to: '/', label: '日历', icon: 'calendar' },
-  { to: '/case-review', label: '病历审阅', icon: 'caseReview', optional: true },
+  { to: '/case-review', label: '病历审阅', icon: 'caseReview' },
   { to: '/chat', label: '消息', icon: 'chat' },
   { to: '/notifications', label: '通知', icon: 'bell', also: ['/review'] },
   { to: '/me', label: '我的', icon: 'me' },
@@ -39,7 +39,7 @@ const Badge = ({ count }) => count > 0 ? <span className="m-tab-badge">{count > 
 export default function MobileTabBar({ notificationCount = 0, chatUnreadCount = 0 }) {
   const { pathname } = useLocation()
   const [pendingReviewCount, setPendingReviewCount] = useState(0)
-  const [caseReview, setCaseReview] = useState({ waiting_count: 0, project_count: 0 })
+  const [caseReview, setCaseReview] = useState({ waiting_count: 0 })
   useEffect(() => {
     const load = () => {
       getPendingSchedules().then(response => setPendingReviewCount((response.data || []).length)).catch(() => setPendingReviewCount(0))
@@ -50,8 +50,7 @@ export default function MobileTabBar({ notificationCount = 0, chatUnreadCount = 
   }, [])
   // 「通知」的角标 = 未读通知 + 待审核日程
   const counts = { caseReview: caseReview.waiting_count, chat: chatUnreadCount, bell: notificationCount + pendingReviewCount }
-  const tabs = TABS.filter(tab => !tab.optional || caseReview.project_count > 0)
-  return <nav className="m-tabbar">{tabs.map(tab => {
+  return <nav className="m-tabbar">{TABS.map(tab => {
     const active = isTabActive(tab, pathname)
     return <Link key={tab.to} to={tab.to} className={active ? 'active' : undefined} aria-current={active ? 'page' : undefined}>
       <span className="m-tab-icon"><TabIcon name={tab.icon} active={active} /><Badge count={counts[tab.icon] || 0} /></span>

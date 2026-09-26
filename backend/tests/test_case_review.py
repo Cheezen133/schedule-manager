@@ -102,7 +102,7 @@ class CaseReviewTests(unittest.TestCase):
         self.assert_status(404, cr.daily_report_file_content, report_file_id, **kwargs)
         self.assert_status(404, cr.export_cases, self.project_id, **kwargs)
         self.assertEqual(cr.list_projects(**kwargs)["data"], [])
-        self.assertEqual(cr.summary(**kwargs)["data"]["project_count"], 0)
+        self.assertEqual(cr.summary(**kwargs)["data"], {"waiting_count": 0})
         # 系统管理员不是成员也能看，也拥有全部权限
         self.assertEqual(cr.get_case(case_id, db=self.db, current_user=self.admin)["data"]["can_conclude"], True)
 
@@ -162,7 +162,7 @@ class CaseReviewTests(unittest.TestCase):
 
     def test_conclusion_latest_wins_and_waiting_count(self):
         case_id = self.make_case()
-        self.assertEqual(cr.summary(db=self.db, current_user=self.reviewer)["data"], {"waiting_count": 1, "project_count": 1})
+        self.assertEqual(cr.summary(db=self.db, current_user=self.reviewer)["data"], {"waiting_count": 1})
         self.assert_status(400, cr.save_conclusion, case_id, cr.ConclusionIn(decision="maybe"), db=self.db, current_user=self.reviewer)
         cr.save_conclusion(case_id, cr.ConclusionIn(decision="pending", comment="缺体温单"), db=self.db, current_user=self.reviewer)
         self.assertEqual(cr.get_case(case_id, db=self.db, current_user=self.owner)["data"]["status"], "pending")
@@ -261,6 +261,48 @@ class CaseReviewTests(unittest.TestCase):
         self.assertEqual((data["status"], data["reviewer"]), ("included", None))
         self.assertEqual(len(data["conclusions"]), 1)
         self.assert_status(404, cr.get_case, case_id, db=self.db, current_user=self.reviewer)
+
+    def test_demo_project_visible_to_all_but_read_only(self):
+        case_id = self.make_case()
+        self.upload_pdf(case_id, user=self.member)
+        file_id = self.first_file_id()
+        note_id = cr.create_annotation(file_id, cr.AnnotationIn(page=1, x=0.2, y=0.2, content="录入员的标记"), db=self.db, current_user=self.member)["data"]["id"]
+        # 只有创建者或系统管理员能设为演示项目，有管理权限的成员也不行；不传 is_public 时照常改名
+        self.set_roles(self.reviewer, ["manager"])
+        self.assert_status(403, cr.update_project, self.project_id, cr.ProjectIn(name="炎症课题", is_public=True), db=self.db, current_user=self.reviewer)
+        cr.update_project(self.project_id, cr.ProjectIn(name="炎症课题", is_public=True), db=self.db, current_user=self.owner)
+        cr.update_project(self.project_id, cr.ProjectIn(name="炎症课题（演示）"), db=self.db, current_user=self.reviewer)
+        self.assertTrue(self.db.get(ReviewProject, self.project_id).is_public)
+
+        # 非成员能看：项目列表、项目、病历、PDF、批注、汇报
+        kwargs = {"db": self.db, "current_user": self.outsider}
+        self.assertEqual([(p["id"], p["is_public"], p["is_member"]) for p in cr.list_projects(**kwargs)["data"]], [(self.project_id, True, False)])
+        project = cr.get_project(self.project_id, **kwargs)["data"]
+        self.assertEqual((project["is_member"], project["my_permissions"], project["can_set_public"]), (False, [], False))
+        self.assertEqual(len(cr.list_cases(self.project_id, **kwargs)["data"]), 1)
+        self.assertFalse(cr.get_case(case_id, **kwargs)["data"]["can_annotate"])
+        cr.case_file_content(file_id, **kwargs)
+        self.assertFalse(cr.list_annotations(file_id, **kwargs)["data"][0]["can_edit"])
+        cr.list_daily_reports(self.project_id, offset=0, limit=30, **kwargs)
+        # 但什么都不能改
+        self.assert_status(403, cr.create_case, self.project_id, cr.CaseIn(code="2"), **kwargs)
+        self.assert_status(403, self.upload_pdf, case_id, user=self.outsider)
+        self.assert_status(403, cr.create_annotation, file_id, cr.AnnotationIn(page=1, x=0.5, y=0.5, content="外人"), **kwargs)
+        self.assert_status(403, cr.save_conclusion, case_id, cr.ConclusionIn(decision="include"), **kwargs)
+        self.assert_status(403, cr.export_cases, self.project_id, **kwargs)
+        self.assert_status(403, cr.update_project, self.project_id, cr.ProjectIn(name="外人改名"), **kwargs)
+
+        # 被移出的成员也只能看：自己原来的批注和上传的文件不能再改、删
+        cr.remove_member(self.project_id, self.member.id, db=self.db, current_user=self.owner)
+        mine = {"db": self.db, "current_user": self.member}
+        self.assertFalse(cr.list_annotations(file_id, **mine)["data"][0]["can_edit"])
+        self.assert_status(403, cr.update_annotation, note_id, cr.AnnotationUpdate(content="改"), **mine)
+        self.assert_status(403, cr.delete_case_file, file_id, **mine)
+
+        # 取消演示后，非成员又看不到了
+        cr.update_project(self.project_id, cr.ProjectIn(name="炎症课题", is_public=False), db=self.db, current_user=self.owner)
+        self.assert_status(404, cr.get_project, self.project_id, **kwargs)
+        self.assertEqual(cr.list_projects(**kwargs)["data"], [])
 
     def test_daily_reports(self):
         with self.assertRaises(HTTPException):

@@ -31,5 +31,6 @@
   3. 前端用该文件夹里的 `vite.test.config.mjs`。要点：`root` 指向 `frontend/`；`/api` 代理到 8001；`cacheDir` 放该文件夹，避免和 5173 的正式前端共用缓存；`esbuild.jsx` 设为 `automatic`，因为配置文件不在项目里，引不到 React 插件。
   4. 测试账号用注册接口 `/api/v1/auth/register` 创建；需要特殊字段值时，直接改测试库。
   5. 库里存的是上传文件的绝对路径：挪动测试环境后，要把 `review_case_files`、`review_daily_report_files` 的 `file_path` 和 `review_annotations` 的 `audio_path` 改成新位置，否则页面仍去旧位置找文件。
+- 核对任何库（测试库、本地库、部署前）的结构用 `schema_differences()`，要先 `import app.models` 加载全部表定义；只导入 `app.database` 时它比对的是空清单，永远返回 `[]`，会把缺列的库误判为完整。
 - 每个页面改完，在手机宽度下把该页功能逐项走一遍，再切到 1280px 确认网页端没有变化。
 - 内置预览窗口约 346px 宽，手机截图用 340×736 视口。截图和动画可能滞后，以用 JS 读到的页面状态为准。

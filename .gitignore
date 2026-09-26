@@ -25,3 +25,5 @@ Thumbs.db
 
 # Project
 schedule_manager.db
+# 病历审阅上传的病历与汇报附件，绝不进版本库
+backend/uploads/case_review/

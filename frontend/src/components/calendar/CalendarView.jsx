@@ -5,9 +5,9 @@ import interactionPlugin from '@fullcalendar/interaction'
 import { toBeijingCalendarValue } from '../../utils/dateTime'
 
 /**
- * 根据状态和分类获取日历事件颜色
+ * 根据状态和分类获取日历事件颜色（手机端日历也用它，保证两端颜色含义一致）
  */
-function getEventColors(schedule) {
+export function getEventColors(schedule) {
   if (schedule.is_busy_placeholder) {
     return { bg: '#e5e7eb', border: '#9ca3af', text: '#6b7280' }
   }

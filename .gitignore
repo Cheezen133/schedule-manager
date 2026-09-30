@@ -27,6 +27,3 @@ Thumbs.db
 schedule_manager.db
 # 病历审阅上传的病历与汇报附件，绝不进版本库
 backend/uploads/case_review/
-
-# 本地部署压缩包与演示数据：可从源码重新生成，且不应发布到源码仓库
-deployment/

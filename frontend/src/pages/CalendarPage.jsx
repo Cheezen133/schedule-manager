@@ -135,8 +135,9 @@ export default function CalendarPage() {
     : '我的日程'
 
   const pendingCount = schedules.filter((s) => s.status === 'pending').length
-  const confirmedCount = schedules.filter((s) => s.status === 'confirmed').length
-  const importantCount = schedules.filter((s) => s.is_important).length
+  const confirmedCount = schedules.filter((s) => s.status === 'confirmed' && !s.is_completed).length
+  const completedCount = schedules.filter((s) => s.is_completed).length
+  const importantCount = schedules.filter((s) => s.is_important && !s.is_completed).length
 
   if (loading) return <Loading />
 
@@ -152,7 +153,7 @@ export default function CalendarPage() {
         onEventClick={handleEventClick}
         onCreate={handleDateClick}
         onExport={handleExport}
-        counts={{ confirmed: confirmedCount, pending: pendingCount, important: importantCount }}
+        counts={{ confirmed: confirmedCount, pending: pendingCount, completed: completedCount, important: importantCount }}
       />
     )
   }
@@ -217,6 +218,10 @@ export default function CalendarPage() {
         <div className="legend-item">
           <div className="legend-dot confirmed"></div>
           <span>已确认 ({confirmedCount})</span>
+        </div>
+        <div className="legend-item">
+          <div className="legend-dot completed"></div>
+          <span>已完成 ({completedCount})</span>
         </div>
         <div className="legend-item">
           <div className="legend-dot pending"></div>

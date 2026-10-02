@@ -29,6 +29,18 @@ DECISIONS = {"include": "纳入", "exclude": "不纳入", "pending": "待定"}
 STATUS_BY_DECISION = {"include": "included", "exclude": "excluded", "pending": "pending"}
 STATUS_LABELS = {"unassigned": "未指派", "waiting": "待审阅", "pending": "待定", "included": "已纳入", "excluded": "未纳入"}
 ANNOTATION_KINDS = {"point", "rect"}
+CASE_FILE_TYPES = {
+    ".pdf": "application/pdf",
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+    ".doc": "application/msword",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xls": "application/vnd.ms-excel",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".ppt": "application/vnd.ms-powerpoint",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".txt": "text/plain",
+}
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
 AUDIO_EXTENSIONS = {".webm", ".m4a", ".mp4", ".ogg", ".oga", ".wav", ".aac", ".mp3"}
 AUDIO_EXTENSION_BY_TYPE = {"audio/webm": ".webm", "audio/mp4": ".m4a", "audio/ogg": ".ogg", "audio/wav": ".wav", "audio/x-wav": ".wav", "audio/aac": ".aac", "audio/mpeg": ".mp3"}
 
@@ -227,14 +239,14 @@ def remove_file(path):
         os.remove(path)
 
 async def save_upload(file: UploadFile, subdir: str, kind: str | None = None):
-    """按 1MB 分块写盘，不设大小上限。kind='pdf' 检查文件头，挡住改了扩展名的非 PDF；kind='audio' 只收常见音频"""
+    """按 1MB 分块写盘，不设大小上限。病历限制格式并校验 PDF/图片文件头；音频只收常见格式"""
     folder = os.path.join(UPLOAD_DIR, subdir)
     os.makedirs(folder, exist_ok=True)
     name = os.path.basename(file.filename or "file.bin")
     ext = os.path.splitext(name)[1].lower()
     base_type = (file.content_type or "").split(";")[0].strip().lower()
-    if kind == "pdf" and ext != ".pdf":
-        raise HTTPException(400, f"{name} 不是 PDF 文件")
+    if kind == "case" and ext not in CASE_FILE_TYPES:
+        raise HTTPException(400, f"{name} 的格式不支持，支持：PDF、Word、Excel、PPT、JPG、PNG、TXT")
     if kind == "audio":
         if ext not in AUDIO_EXTENSIONS:
             ext = AUDIO_EXTENSION_BY_TYPE.get(base_type, "")
@@ -246,8 +258,13 @@ async def save_upload(file: UploadFile, subdir: str, kind: str | None = None):
     try:
         with open(path, "wb") as handle:
             while chunk := await file.read(1024 * 1024):
-                if size == 0 and kind == "pdf" and b"%PDF-" not in chunk[:1024]:
-                    raise HTTPException(400, f"{name} 不是有效的 PDF 文件")
+                if size == 0 and kind == "case":
+                    if ext == ".pdf" and b"%PDF-" not in chunk[:1024]:
+                        raise HTTPException(400, f"{name} 不是有效的 PDF 文件")
+                    if ext in {".jpg", ".jpeg"} and not chunk.startswith(b"\xff\xd8\xff"):
+                        raise HTTPException(400, f"{name} 不是有效的 JPEG 图片")
+                    if ext == ".png" and not chunk.startswith(b"\x89PNG\r\n\x1a\n"):
+                        raise HTTPException(400, f"{name} 不是有效的 PNG 图片")
                 size += len(chunk)
                 handle.write(chunk)
         if size == 0:
@@ -255,7 +272,7 @@ async def save_upload(file: UploadFile, subdir: str, kind: str | None = None):
     except Exception:
         remove_file(path)
         raise
-    content_type = "application/pdf" if kind == "pdf" else (base_type or "application/octet-stream")
+    content_type = CASE_FILE_TYPES[ext] if kind == "case" else (base_type or "application/octet-stream")
     return {"name": name, "stored_name": stored_name, "file_path": path, "content_type": content_type, "file_size": size}
 
 async def save_uploads(files, subdir, kind=None):
@@ -312,8 +329,14 @@ def case_dict(item, users, file_counts, note_counts, latest):
             "created_by": user_brief(item.created_by, users), "created_at": to_beijing_iso(item.created_at),
             "updated_at": to_beijing_iso(item.updated_at)}
 
+def case_file_type(item):
+    ext = os.path.splitext(item.name)[1].lower()
+    preview = "pdf" if ext == ".pdf" else "image" if ext in IMAGE_EXTENSIONS else "download"
+    return {"content_type": CASE_FILE_TYPES.get(ext, "application/octet-stream"), "preview_type": preview}
+
 def case_file_dict(item, users, note_counts=None):
     return {"id": item.id, "case_id": item.case_id, "name": item.name, "file_size": item.file_size,
+            **case_file_type(item),
             "uploaded_by": user_brief(item.uploaded_by, users), "created_at": to_beijing_iso(item.created_at),
             "annotation_count": (note_counts or {}).get(item.id, 0)}
 
@@ -407,7 +430,7 @@ def update_project(project_id: int, data: ProjectIn, db: Session = Depends(get_d
         raise HTTPException(400, "请填写项目名称")
     project.name = name
     project.description = clean_text(data.description, 2000)
-    # 设为演示项目会让所有登录用户看到其中全部病历和 PDF，所以只交给创建者或系统管理员
+    # 设为演示项目会让所有登录用户看到其中全部病历和文件，所以只交给创建者或系统管理员
     if data.is_public is not None and data.is_public != project.is_public:
         if not can_delete_project(project, current_user):
             raise HTTPException(403, "只有项目创建者或系统管理员能设置演示项目")
@@ -483,14 +506,14 @@ def remove_member(project_id: int, user_id: int, db: Session = Depends(get_db), 
     return {"code": 0}
 
 
-# ----- 病历与 PDF -----
+# ----- 病历与文件 -----
 
 def remove_annotation_audio(file_ids, db):
     for (path,) in db.query(ReviewAnnotation.audio_path).filter(ReviewAnnotation.file_id.in_(file_ids), ReviewAnnotation.audio_path.isnot(None)).all():
         remove_file(path)
 
 def delete_case_rows(case_id, db):
-    """删一份病历连同它的 PDF 文件、语音批注（磁盘上的也删）、批注和结论。
+    """删一份病历连同它的文件、语音批注（磁盘上的也删）、批注和结论。
     子表先删、父表后删，逐条执行批量删除，保证 MySQL 外键约束下的顺序"""
     files = db.query(ReviewCaseFile).filter_by(case_id=case_id).all()
     file_ids = [item.id for item in files]
@@ -584,7 +607,7 @@ def delete_case(case_id: int, db: Session = Depends(get_db), current_user: User 
 async def upload_case_files(case_id: int, files: list[UploadFile] = File(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     item, project = visible_case(case_id, current_user, db)
     require(project, current_user, db, "upload", "你没有上传病历的权限")
-    saved = await save_uploads(files, "cases", kind="pdf")
+    saved = await save_uploads(files, "cases", kind="case")
     for info in saved:
         db.add(ReviewCaseFile(case_id=item.id, uploaded_by=current_user.id, **info))
     write_log(db, project.id, current_user, "upload_file", case_id=item.id, detail=[info["name"] for info in saved])
@@ -610,10 +633,17 @@ def case_file_content(file_id: int, db: Session = Depends(get_db), current_user:
         raise HTTPException(404, "文件已丢失")
     write_log(db, project.id, current_user, "view_file", case_id=case.id, detail={"file_id": item.id, "name": item.name})
     db.commit()
-    return FileResponse(item.file_path, filename=item.name, media_type="application/pdf")
+    return FileResponse(item.file_path, filename=item.name, media_type=case_file_type(item)["content_type"])
 
 
 # ----- 批注（文字或语音）-----
+
+def check_annotatable(item, page):
+    preview = case_file_type(item)["preview_type"]
+    if preview == "download":
+        raise HTTPException(400, "仅 PDF 和图片支持位置批注，请下载后阅读此文件")
+    if preview == "image" and page != 1:
+        raise HTTPException(400, "图片批注只能位于第 1 页")
 
 def check_geometry(page, kind, x, y, width, height):
     """位置按页面比例存，必须落在页面内（留一点浮点误差）；返回整理后的宽高"""
@@ -639,6 +669,7 @@ def list_annotations(file_id: int, db: Session = Depends(get_db), current_user: 
 def create_annotation(file_id: int, data: AnnotationIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     item, _, project = visible_case_file(file_id, current_user, db)
     perms = require(project, current_user, db, "annotate", "你没有批注权限")
+    check_annotatable(item, data.page)
     content = clean_text(data.content, 2000)
     if not content:
         raise HTTPException(400, "请填写批注内容")
@@ -654,6 +685,7 @@ async def create_voice_annotation(file_id: int, page: int = Form(...), kind: str
                                   audio: UploadFile = File(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     item, _, project = visible_case_file(file_id, current_user, db)
     perms = require(project, current_user, db, "annotate", "你没有批注权限")
+    check_annotatable(item, page)
     width, height = check_geometry(page, kind, x, y, width, height)
     text = clean_text(content, 2000)
     info = await save_upload(audio, "audio", kind="audio")
@@ -834,7 +866,7 @@ def export_cases(project_id: int, db: Session = Depends(get_db), current_user: U
     users = user_map([item.reviewer_id for item in cases] + [c.reviewer_id for c in latest.values()], db)
     buffer = io.StringIO()
     writer = csv.writer(buffer)
-    writer.writerow(["编号", "标题", "指派审阅人", "状态", "结论", "病因诊断", "审阅意见", "结论人", "结论时间", "PDF 数", "批注数"])
+    writer.writerow(["编号", "标题", "指派审阅人", "状态", "结论", "病因诊断", "审阅意见", "结论人", "结论时间", "文件数", "批注数"])
     for item in cases:
         row = case_dict(item, users, file_counts, note_counts, latest)
         conclusion = row["conclusion"] or {}

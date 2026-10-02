@@ -1,6 +1,6 @@
 import apiClient from './client'
 
-// 病历审阅板块的接口。上传、下载病历不设超时（PDF 不限大小，慢网络下可能要很久）
+// 病历审阅板块的接口。上传、下载病历不设超时（文件不限大小，慢网络下可能要很久）
 const base = '/case-review'
 const data = response => response.data.data
 const NO_TIMEOUT = { timeout: 0 }
@@ -31,7 +31,7 @@ export function uploadCaseFiles(caseId, files, onProgress) {
 }
 export const deleteCaseFile = fileId => apiClient.delete(`${base}/files/${fileId}`)
 export const caseFileUrl = fileId => `/api/v1${base}/files/${fileId}/content`
-// 取回 PDF 原始字节交给 PDF.js；onProgress 用来显示下载进度
+// 取回文件原始字节；onProgress 用来显示下载进度
 export const fetchCaseFile = (fileId, onProgress) => apiClient.get(`${base}/files/${fileId}/content`, { ...NO_TIMEOUT, responseType: 'arraybuffer', onDownloadProgress: onProgress }).then(response => response.data)
 
 export const listAnnotations = fileId => apiClient.get(`${base}/files/${fileId}/annotations`).then(data)

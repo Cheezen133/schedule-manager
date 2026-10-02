@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { caseFileUrl, createAnnotation, createVoiceAnnotation, deleteAnnotation, deleteCaseFile, deleteReviewCase, getReviewCase, getReviewProject, listAnnotations, updateAnnotation, uploadCaseFiles } from '../api/caseReview'
 import { downloadAuthorizedFile } from '../api/files'
 import PdfViewer from '../components/caseReview/PdfViewer'
+import ImageViewer from '../components/caseReview/ImageViewer'
+import { CASE_FILE_ACCEPT, CASE_FILE_HINT, fileTypeLabel } from '../components/caseReview/fileFormats'
 import { AnnotationList, ConclusionPanel } from '../components/caseReview/CasePanels'
 import { AnnotationEditor, CaseFormModal } from '../components/caseReview/Forms'
 import { VoicePlayer } from '../components/caseReview/Voice'
@@ -15,7 +17,7 @@ import { useAuth } from '../contexts/AuthContext'
 import useIsMobile from '../hooks/useIsMobile'
 import { formatBeijingDateTime } from '../utils/dateTime'
 
-// 病历页。正在看的 PDF 记在网址 ?file= 里：手机上它决定是否全屏打开阅读器，返回手势即可关闭
+// 病历页。正在看的文件记在网址 ?file= 里：手机上它决定是否全屏打开阅读器，返回手势即可关闭
 export default function CaseReviewCasePage() {
   const { projectId, caseId } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -52,11 +54,17 @@ export default function CaseReviewCasePage() {
   const fileParam = searchParams.get('file')
   const activeFile = files.find(file => String(file.id) === fileParam) || (isMobile ? null : files[0]) || null
   const activeFileId = activeFile?.id
+  const activeFileRef = useRef(activeFileId)
+  activeFileRef.current = activeFileId
+  const previewType = activeFile?.preview_type || 'download'
+  const canPreview = previewType === 'pdf' || previewType === 'image'
 
-  const loadNotes = useCallback(() => (activeFileId ? listAnnotations(activeFileId).then(setNotes).catch(() => setNotes([])) : Promise.resolve(setNotes([]))), [activeFileId])
+  const loadNotes = useCallback(() => (activeFileId && canPreview ? listAnnotations(activeFileId) : Promise.resolve([])), [activeFileId, canPreview])
   useEffect(() => {
-    setSelectedId(null); setDraft(null); setMode('view')
-    loadNotes()
+    let cancelled = false
+    setNotes([]); setSelectedId(null); setDraft(null); setMode('view'); setFocusRequest(null); setEditingNote(null); setSheet(null)
+    loadNotes().then(value => { if (!cancelled) setNotes(value) }).catch(() => { if (!cancelled) setNotes([]) })
+    return () => { cancelled = true }
   }, [loadNotes])
   // 审阅人的批注：作者身份里有「审阅人」，或是这份病历指派的审阅人
   const assignedReviewerId = reviewCase?.reviewer?.id
@@ -79,18 +87,23 @@ export default function CaseReviewCasePage() {
   }
   // 有录音就走语音批注接口（文字可空），否则只存文字
   const saveDraft = async (content, voice) => {
+    const fileId = activeFileId
     const note = voice
       ? await createVoiceAnnotation(activeFileId, { ...draft, content, duration: voice.duration }, voice.blob, voice.filename)
       : await createAnnotation(activeFileId, { ...draft, content })
-    setDraft(null); setMode('view')
-    await loadNotes()
-    setSelectedId(note.id)
     loadCase()
+    if (activeFileRef.current !== fileId) return
+    setDraft(null); setMode('view')
+    const nextNotes = await loadNotes()
+    if (activeFileRef.current === fileId) { setNotes(nextNotes); setSelectedId(note.id) }
   }
   const saveEditedNote = async content => {
+    const fileId = activeFileId
     await updateAnnotation(editingNote.id, content)
+    if (activeFileRef.current !== fileId) return
     setEditingNote(null)
-    loadNotes()
+    const nextNotes = await loadNotes()
+    if (activeFileRef.current === fileId) setNotes(nextNotes)
   }
   const uploadFiles = async event => {
     const chosen = Array.from(event.target.files || [])
@@ -100,7 +113,7 @@ export default function CaseReviewCasePage() {
     try {
       await uploadCaseFiles(reviewCase.id, chosen, progressEvent => setUploadProgress(progressText(progressEvent) || '…'))
       await loadCase()
-      notify(`已上传 ${chosen.length} 份 PDF`, 'success')
+      notify(`已上传 ${chosen.length} 份文件`, 'success')
     } catch (err) {
       notify(errorText(err, '上传失败'))
     } finally {
@@ -121,8 +134,11 @@ export default function CaseReviewCasePage() {
         await loadCase()
       } else {
         await deleteAnnotation(target.note.id)
-        setSelectedId(null)
-        await loadNotes()
+        if (activeFileRef.current === target.note.file_id) {
+          setSelectedId(null)
+          const nextNotes = await loadNotes()
+          if (activeFileRef.current === target.note.file_id) setNotes(nextNotes)
+        }
         loadCase()
       }
     } catch (err) {
@@ -136,15 +152,20 @@ export default function CaseReviewCasePage() {
   const selectedNote = markedNotes.find(note => note.id === selectedId)
   const canDeleteFile = file => reviewCase.can_manage_project || file.uploaded_by?.id === user?.id
   const toggleMode = next => setMode(mode === next ? 'view' : next)
-  const modeButtons = reviewCase.can_annotate && <div className="cr-toolbar-group cr-mode-buttons">
+  const modeButtons = reviewCase.can_annotate && canPreview && <div className="cr-toolbar-group cr-mode-buttons">
     <button type="button" className={mode === 'point' ? 'is-active' : ''} aria-pressed={mode === 'point'} onClick={() => toggleMode('point')}>点注</button>
     <button type="button" className={mode === 'rect' ? 'is-active' : ''} aria-pressed={mode === 'rect'} onClick={() => toggleMode('rect')}>框选</button>
   </div>
   const toolbarExtra = isMobile ? <>{modeButtons}<div className="cr-toolbar-group"><button type="button" onClick={() => setSheet('notes')}>批注 {notes.length}</button><button type="button" onClick={() => setSheet('conclusion')}>结论</button></div></> : modeButtons
-  const viewer = activeFile && <PdfViewer key={activeFile.id} fileId={activeFile.id} notes={markedNotes} mode={mode} selectedId={selectedId} focusRequest={focusRequest} draft={draft} onSelect={setSelectedId} onDraft={setDraft} toolbarExtra={toolbarExtra} />
+  const viewerProps = { fileId: activeFileId, notes: markedNotes, mode, selectedId, focusRequest, draft, onSelect: setSelectedId, onDraft: setDraft, toolbarExtra }
+  const viewer = activeFile && (previewType === 'pdf'
+    ? <PdfViewer key={activeFile.id} {...viewerProps} />
+    : previewType === 'image'
+      ? <ImageViewer key={activeFile.id} name={activeFile.name} {...viewerProps} />
+      : <div className="cr-download-preview"><strong>{activeFile.name}</strong><p>此格式请下载后阅读，审阅结论可在病历中提交。</p><button type="button" className="btn-primary" onClick={() => download(activeFile)}>下载文件</button></div>)
   const conclusion = <ConclusionPanel key={`${reviewCase.id}-${reviewCase.reviewer?.id}`} reviewCase={reviewCase} currentUserId={user?.id} onSaved={loadCase} />
   const noteList = <AnnotationList notes={markedNotes} selectedId={selectedId} onSelect={id => { setSheet(null); focusNote(id) }} onEdit={note => { setSheet(null); setEditingNote(note) }} onDelete={note => { setSheet(null); setConfirm({ type: 'note', note }) }} />
-  const uploadButton = reviewCase.can_upload && <label className={`btn-secondary cr-upload${uploadProgress ? ' is-busy' : ''}`}>{uploadProgress ? `上传中 ${uploadProgress}` : '上传 PDF'}<input type="file" accept="application/pdf,.pdf" multiple hidden disabled={Boolean(uploadProgress)} onChange={uploadFiles} /></label>
+  const uploadButton = reviewCase.can_upload && <label title={CASE_FILE_HINT} className={`btn-secondary cr-upload${uploadProgress ? ' is-busy' : ''}`}>{uploadProgress ? `上传中 ${uploadProgress}` : '上传文件'}<input type="file" accept={CASE_FILE_ACCEPT} multiple hidden disabled={Boolean(uploadProgress)} onChange={uploadFiles} /></label>
   const info = <dl className="cr-case-info">
     <div><dt>编号</dt><dd>{reviewCase.code}</dd></div>
     {reviewCase.title && <div><dt>标题</dt><dd>{reviewCase.title}</dd></div>}
@@ -156,22 +177,22 @@ export default function CaseReviewCasePage() {
   const fileList = <ul className="cr-file-list">
     {files.map(file => <li key={file.id} className={!isMobile && file.id === activeFileId ? 'is-active' : ''}>
       <button type="button" className="cr-file-open" onClick={() => openFile(file.id)}>
-        <span className="cr-file-icon">PDF</span>
-        <span className="cr-file-name"><span className="cr-file-title" title={file.name}>{file.name}</span><small>{formatSize(file.file_size)} · 批注 {file.annotation_count} · {file.uploaded_by?.nickname}</small></span>
+        <span className="cr-file-icon">{fileTypeLabel(file)}</span>
+        <span className="cr-file-name"><span className="cr-file-title" title={file.name}>{file.name}</span><small>{formatSize(file.file_size)} · {file.preview_type === 'download' ? '下载阅读' : `批注 ${file.annotation_count}`} · {file.uploaded_by?.nickname}</small></span>
       </button>
       {isMobile
         ? <button type="button" className="text-button cr-file-more" aria-label={`${file.name} 的操作`} onClick={() => setFileMenu(file)}>···</button>
         : <span className="cr-file-actions"><button type="button" className="text-button" onClick={() => download(file)}>下载</button>{canDeleteFile(file) && <button type="button" className="text-button cr-danger" onClick={() => setConfirm({ type: 'file', file })}>删除</button>}</span>}
     </li>)}
-    {!files.length && <li className="cr-muted">还没有上传病历 PDF</li>}
+    {!files.length && <li className="cr-muted">还没有上传病历文件</li>}
   </ul>
   const dialogs = <>
     {draft && <AnnotationEditor draft={draft} onCancel={() => setDraft(null)} onSave={saveDraft} />}
     {editingNote && <AnnotationEditor initialContent={editingNote.content} allowEmpty={editingNote.has_audio} onCancel={() => setEditingNote(null)} onSave={saveEditedNote} />}
     {editingCase && <CaseFormModal projectId={Number(projectId)} members={members} reviewCase={reviewCase} onClose={() => setEditingCase(false)} onSaved={() => { setEditingCase(false); loadCase() }} />}
     <ConfirmDialog open={Boolean(confirm)} danger confirmText="删除" onConfirm={runConfirm} onCancel={() => setConfirm(null)}
-      title={confirm?.type === 'case' ? '删除病历' : confirm?.type === 'file' ? '删除 PDF' : '删除批注'}
-      message={confirm?.type === 'case' ? `病历 ${reviewCase.code} 的全部 PDF、批注和结论都会删除，无法恢复。` : confirm?.type === 'file' ? `删除「${confirm.file.name}」及其上的批注？` : '删除这条批注？'} />
+      title={confirm?.type === 'case' ? '删除病历' : confirm?.type === 'file' ? '删除文件' : '删除批注'}
+      message={confirm?.type === 'case' ? `病历 ${reviewCase.code} 的全部文件、批注和结论都会删除，无法恢复。` : confirm?.type === 'file' ? `删除「${confirm.file.name}」及其上的批注？` : '删除这条批注？'} />
   </>
 
   if (isMobile) return <div className="cr-case-page cr-case-mobile">
@@ -179,7 +200,8 @@ export default function CaseReviewCasePage() {
     <section className="cr-panel">{info}</section>
     <h3 className="cr-section-title">审阅结论</h3>
     <section className="cr-panel">{conclusion}</section>
-    <div className="cr-section-head"><h3 className="cr-section-title">病历 PDF</h3>{uploadButton}</div>
+    <div className="cr-section-head"><h3 className="cr-section-title">病历文件</h3>{uploadButton}</div>
+    {reviewCase.can_upload && <p className="cr-muted">{CASE_FILE_HINT}</p>}
     <section className="cr-panel">{fileList}</section>
     {reviewCase.can_edit && <button type="button" className="cr-delete-case" onClick={() => setConfirm({ type: 'case' })}>删除病历</button>}
     {activeFile && <div className="cr-viewer-full">
@@ -211,13 +233,13 @@ export default function CaseReviewCasePage() {
     <div className="cr-case-body">
       <section className="cr-viewer-pane">
         {files.length > 1 && <div className="cr-file-tabs">{files.map(file => <button type="button" key={file.id} className={file.id === activeFileId ? 'is-active' : ''} onClick={() => openFile(file.id)}>{file.name}</button>)}</div>}
-        {viewer || <div className="empty-state cr-empty">还没有上传病历 PDF。{uploadButton}</div>}
+        {viewer || <div className="empty-state cr-empty">还没有上传病历文件。{uploadButton}</div>}
       </section>
       <aside className="cr-side">
         <section className="cr-panel"><h3>审阅结论</h3>{conclusion}</section>
-        <section className="cr-panel"><h3>批注 <small>{notes.length}</small></h3>{noteList}</section>
+        {canPreview && <section className="cr-panel"><h3>批注 <small>{notes.length}</small></h3>{noteList}</section>}
         <section className="cr-panel"><h3>病历信息</h3>{info}</section>
-        <section className="cr-panel"><div className="cr-section-head"><h3>病历 PDF</h3>{uploadButton}</div>{fileList}</section>
+        <section className="cr-panel"><div className="cr-section-head"><h3>病历文件</h3>{uploadButton}</div>{reviewCase.can_upload && <p className="cr-muted">{CASE_FILE_HINT}</p>}{fileList}</section>
       </aside>
     </div>
     {dialogs}

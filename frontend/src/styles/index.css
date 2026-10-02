@@ -788,6 +788,11 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
   background: #16a34a;
 }
 
+.legend-dot.completed, .status-completed {
+  background: #e5e7eb;
+  color: #6b7280;
+}
+
 .legend-dot.rejected {
   background: #d1d5db;
 }
@@ -2021,6 +2026,8 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
   font-size: 0.9rem;
   line-height: 1.5;
   word-break: break-word;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .chat-msg-sender {
@@ -2141,7 +2148,19 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
   border-radius: 6px;
   font-size: 0.9rem;
   outline: none;
+  display: block;
+  width: 100%;
+  max-height: 128px;
+  min-height: 40px;
+  resize: none;
+  overflow-y: auto;
 }
+
+.chat-composer { position: relative; flex: 1; min-width: 0; }
+.chat-mention-list { position: absolute; z-index: 20; bottom: calc(100% + 6px); left: 0; right: 0; max-height: 220px; overflow-y: auto; padding: 4px; border: 1px solid var(--gray-200); border-radius: 9px; background: white; box-shadow: 0 8px 24px rgba(15, 23, 42, .18); }
+.chat-mention-list button { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 9px 10px; border: 0; border-radius: 6px; background: transparent; text-align: left; color: var(--gray-800); cursor: pointer; }
+.chat-mention-list button:hover, .chat-mention-list button.active { background: #eef2ff; }
+.chat-mention-list small { color: var(--gray-500); }
 
 .chat-input-text:focus {
   border-color: var(--primary);
@@ -2613,6 +2632,11 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
 .schedule-category-field { display: grid; gap: .35rem; }.schedule-category-heading { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }.schedule-category-heading label { margin: 0; }.schedule-category-field > small { color: var(--gray-500); font-size: .76rem; }.category-manager-modal { width: min(620px, calc(100vw - 2rem)); max-height: min(720px, calc(100vh - 2rem)); overflow: hidden; }.category-owner-hint { margin: -.25rem 0 .85rem; padding: .55rem .65rem; color: var(--primary); background: #eef2ff; border-radius: 7px; font-size: .8rem; }.category-manager-form { display: grid; grid-template-columns: minmax(0, 2fr) minmax(90px, .8fr) 80px; gap: .7rem; padding-bottom: .9rem; border-bottom: 1px solid var(--gray-200); }.category-manager-form label { display: grid; gap: .3rem; color: var(--gray-600); font-size: .8rem; font-weight: 600; }.category-manager-form .wide { grid-column: 1 / -1; }.category-manager-form input[type="color"] { width: 100%; min-height: 40px; padding: .2rem; }.category-manager-list { display: grid; gap: .45rem; margin-top: .8rem; overflow-y: auto; }.category-manager-list article { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: .7rem; min-height: 58px; padding: .55rem .65rem; border: 1px solid var(--gray-200); border-left: 4px solid var(--category-color); border-radius: 8px; }.category-manager-icon { display: grid; place-items: center; width: 36px; height: 36px; background: var(--gray-50); border-radius: 7px; }.category-manager-list article > div:nth-child(2) { display: grid; min-width: 0; }.category-manager-list article small { overflow: hidden; color: var(--gray-500); font-size: .74rem; text-overflow: ellipsis; white-space: nowrap; }.category-manager-actions { display: flex; gap: .3rem; }.category-manager-actions .ui-button { min-height: 32px; padding: .3rem .55rem; font-size: .76rem; }
 @media (max-width: 980px) { .management-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } } @media (max-width: 600px) { .management-grid { grid-template-columns: 1fr; }.management-heading { display: grid; }.management-shortcut { align-items: flex-start; flex-direction: column; } }
 @media (max-width: 600px) { .category-manager-form { grid-template-columns: 1fr 1fr; }.category-manager-form .wide, .category-manager-form label:first-child { grid-column: 1 / -1; }.category-manager-list article { grid-template-columns: 34px minmax(0, 1fr); }.category-manager-actions { grid-column: 1 / -1; justify-content: flex-end; } }
+.category-manager-modal { display: flex; flex-direction: column; }
+.category-manager-preview { display: flex; align-items: center; gap: .55rem; color: var(--gray-600); font-size: .8rem; }
+.category-manager-preview .category-manager-icon { flex: 0 0 36px; }
+.category-manager-icon { background: var(--category-color, #3788d8); color: white; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .12); }
+.category-manager-list { min-height: 0; }
 
 /* ===== 移动端布局与长按上下文菜单 ===== */
 .chat-media-loading, .chat-media-error { display: grid; place-items: center; min-width: 150px; min-height: 92px; padding: .75rem; border: 1px dashed var(--gray-300); border-radius: 9px; color: var(--gray-500); background: var(--gray-50); font-size: .82rem; }.chat-media-error { color: var(--danger); border-color: #fecaca; background: #fff7f7; }.chat-msg, .patient-card, .group-member-row, .group-record-list article { -webkit-touch-callout: none; }

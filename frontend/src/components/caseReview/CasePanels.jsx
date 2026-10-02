@@ -61,7 +61,7 @@ export function ConclusionPanel({ reviewCase, currentUserId, onSaved }) {
   </form>
 }
 
-// 批注列表：编号与 PDF 上的标记一致，点一条就跳到它的位置；语音批注带播放按钮
+// 批注列表：编号与文件上的标记一致，点一条就跳到它的位置；语音批注带播放按钮
 export function AnnotationList({ notes, selectedId, onSelect, onEdit, onDelete }) {
   const listRef = useRef(null)
   useEffect(() => {

@@ -3,6 +3,7 @@ import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs'
 import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
 import { fetchCaseFile } from '../../api/caseReview'
 import { errorText } from './common'
+import AnnotationOverlay from './AnnotationOverlay'
 
 // 用 PDF.js 的 legacy 构建渲染病历：兼容较旧的企业微信内置浏览器。
 // 字符映射、标准字体、图片解码器由 vite.config.js 的 pdfjsAssets 插件提供（打包后在 dist/pdfjs）。
@@ -11,23 +12,10 @@ const ASSETS = `${import.meta.env.BASE_URL}pdfjs/`
 const DOCUMENT_OPTIONS = { cMapUrl: `${ASSETS}cmaps/`, cMapPacked: true, standardFontDataUrl: `${ASSETS}standard_fonts/`, wasmUrl: `${ASSETS}wasm/`, iccUrl: `${ASSETS}iccs/` }
 const ZOOMS = [1, 1.25, 1.5, 2, 3]
 const MAX_CANVAS_PIXELS = 16_000_000 // 部分 iOS 设备单个画布超过约 1600 万像素就画不出来
-const clamp = value => Math.min(1, Math.max(0, value))
-const percent = value => `${value * 100}%`
-
-// 把指针位置换算成相对页面的比例坐标（0–1），手机和电脑上都能对上
-function relativePoint(event, element) {
-  const rect = element.getBoundingClientRect()
-  return { x: clamp((event.clientX - rect.left) / rect.width), y: clamp((event.clientY - rect.top) / rect.height) }
-}
-const boxOf = (a, b) => ({ x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(a.x - b.x), height: Math.abs(a.y - b.y) })
-const boxStyle = box => ({ left: percent(box.x), top: percent(box.y), width: percent(box.width), height: percent(box.height) })
-
 function PdfPage({ page, pageNumber, width, scrollRoot, notes, numbers, mode, selectedId, draft, onSelect, onDraft, onVisible }) {
   const wrapRef = useRef(null)
   const canvasRef = useRef(null)
-  const overlayRef = useRef(null)
   const [near, setNear] = useState(false)
-  const [drawing, setDrawing] = useState(null)
   const base = useMemo(() => page.getViewport({ scale: 1 }), [page])
   const height = Math.round((width * base.height) / base.width)
 
@@ -60,49 +48,9 @@ function PdfPage({ page, pageNumber, width, scrollRoot, notes, numbers, mode, se
     return () => task.cancel()
   }, [page, base, near, width, height])
 
-  const handleClick = event => {
-    if (mode !== 'point') return
-    const { x, y } = relativePoint(event, overlayRef.current)
-    onDraft({ page: pageNumber, kind: 'point', x, y, width: 0, height: 0 })
-  }
-  const handlePointerDown = event => {
-    if (mode !== 'rect') return
-    event.preventDefault()
-    overlayRef.current.setPointerCapture?.(event.pointerId)
-    const start = relativePoint(event, overlayRef.current)
-    setDrawing({ start, end: start })
-  }
-  const handlePointerMove = event => {
-    if (drawing) setDrawing({ ...drawing, end: relativePoint(event, overlayRef.current) })
-  }
-  const handlePointerUp = event => {
-    if (!drawing) return
-    const box = boxOf(drawing.start, relativePoint(event, overlayRef.current))
-    setDrawing(null)
-    if (box.width > 0.01 && box.height > 0.005) onDraft({ page: pageNumber, kind: 'rect', ...box })
-  }
-  const selectNote = id => event => {
-    event.stopPropagation()
-    onSelect(id)
-  }
-  const stop = event => event.stopPropagation()
-
   return <div className="cr-page" ref={wrapRef} data-page={pageNumber} style={{ width, height }}>
     <canvas ref={canvasRef} style={{ width, height }} />
-    <div ref={overlayRef} className={`cr-page-overlay cr-mode-${mode}`} onClick={handleClick} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerCancel={() => setDrawing(null)}>
-      {notes.map(note => {
-        // 审阅人的批注用另一种形状（见 caseReview.css）
-        const state = `${note.byReviewer ? ' is-reviewer' : ''}${note.id === selectedId ? ' is-selected' : ''}`
-        const label = `批注 ${numbers[note.id]}${note.byReviewer ? '（审阅人）' : ''}`
-        return note.kind === 'rect'
-          ? <button type="button" key={note.id} id={`cr-note-${note.id}`} className={`cr-note-rect${state}`} style={boxStyle(note)} onClick={selectNote(note.id)} onPointerDown={stop} aria-label={label}><span>{numbers[note.id]}</span></button>
-          : <button type="button" key={note.id} id={`cr-note-${note.id}`} className={`cr-note-pin${state}`} style={{ left: percent(note.x), top: percent(note.y) }} onClick={selectNote(note.id)} onPointerDown={stop} aria-label={label}>{numbers[note.id]}</button>
-      })}
-      {draft?.page === pageNumber && (draft.kind === 'rect'
-        ? <div className="cr-note-rect is-draft" style={boxStyle(draft)} />
-        : <div className="cr-note-pin is-draft" style={{ left: percent(draft.x), top: percent(draft.y) }}>＋</div>)}
-      {drawing && <div className="cr-note-rect is-draft" style={boxStyle(boxOf(drawing.start, drawing.end))} />}
-    </div>
+    <AnnotationOverlay pageNumber={pageNumber} notes={notes} numbers={numbers} mode={mode} selectedId={selectedId} draft={draft} onSelect={onSelect} onDraft={onDraft} />
     <span className="cr-page-number">{pageNumber}</span>
   </div>
 }

@@ -1,3 +1,4 @@
+import { CASE_FILE_ACCEPT, CASE_FILE_HINT } from './fileFormats'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createReviewCase, getReviewCase, listReviewCases, uploadCaseFiles } from '../../api/caseReview'
 import useIsMobile from '../../hooks/useIsMobile'
@@ -8,10 +9,10 @@ const MAX_CODE = 50 // 与后端编号长度上限一致
 const sizeOf = items => items.reduce((sum, item) => sum + item.file.size, 0)
 const countOf = tasks => tasks.reduce((sum, task) => sum + task.items.length, 0)
 // 上传名和原文件名不同（同名文件加了子文件夹前缀）时，换个名字再传，内容不复制
-const asUpload = item => (item.name === item.file.name ? item.file : new File([item.file], item.name, { type: item.file.type || 'application/pdf', lastModified: item.file.lastModified }))
+const asUpload = item => (item.name === item.file.name ? item.file : new File([item.file], item.name, { type: item.file.type || 'application/octet-stream', lastModified: item.file.lastModified }))
 
-// 批量导入病历：电脑上可选整个文件夹（每个患者一个子文件夹，子文件夹名即编号），也可多选 PDF（按文件名开头的编号分组）；
-// 手机上选不了文件夹，只能多选 PDF。先预览分组、可改编号，确认后逐个文件上传：编号已存在就追加到原病历，
+// 批量导入病历：电脑上可选整个文件夹（每个患者一个子文件夹，子文件夹名即编号），也可多选文件（按文件名开头的编号分组）；
+// 手机上选不了文件夹，只能多选文件。先预览分组、可改编号，确认后逐个文件上传：编号已存在就追加到原病历，
 // 病历里已有同名文件的跳过，所以中断后重新导入同一批不会重复
 export default function BatchImportModal({ projectId, cases, reviewers, onClose, onImported }) {
   const isMobile = useIsMobile()
@@ -149,22 +150,23 @@ export default function BatchImportModal({ projectId, cases, reviewers, onClose,
     <div className="modal cr-modal cr-batch" role="dialog" aria-label="批量导入病历">
       <div className="modal-header"><h3>批量导入病历</h3>{!running && <button type="button" className="text-button" onClick={onClose}>{result ? '完成' : '关闭'}</button>}</div>
       <input ref={folderInput} type="file" webkitdirectory="" multiple hidden onChange={pick(true)} />
-      <input ref={fileInput} type="file" accept="application/pdf,.pdf" multiple hidden onChange={pick(false)} />
+      <input ref={fileInput} type="file" accept={CASE_FILE_ACCEPT} multiple hidden onChange={pick(false)} />
 
       {!rows && <div className="cr-batch-intro">
-        {!isMobile && <p>选一个总文件夹：里面每个患者一个子文件夹，<strong>子文件夹名就是编号</strong>，放这个患者的全部 PDF，几份都行。</p>}
-        <p>{isMobile ? '手机上不能选文件夹，可以直接多选 PDF' : '也可以直接多选 PDF'}：按文件名开头的编号分组，编号后面用下划线或空格隔开，如「123_入院记录.pdf」。{isMobile && '整个文件夹导入请用电脑。'}</p>
-        <p className="cr-muted">编号已存在的，PDF 追加到原病历；病历里已有同名文件的会跳过，所以中断后把同一批重新导入一遍也不会重复。</p>
+        {!isMobile && <p>选一个总文件夹：里面每个患者一个子文件夹，<strong>子文件夹名就是编号</strong>，放这个患者的全部文件，几份都行。</p>}
+        <p>{isMobile ? '手机上不能选文件夹，可以直接多选文件' : '也可以直接多选文件'}：按文件名开头的编号分组，编号后面用下划线或空格隔开，如「123_入院记录.pdf」。{isMobile && '整个文件夹导入请用电脑。'}</p>
+        <p className="cr-muted">编号已存在的，文件追加到原病历；病历里已有同名文件的会跳过，所以中断后把同一批重新导入一遍也不会重复。</p>
+        <p className="cr-muted">{CASE_FILE_HINT}</p>
         <div className="cr-batch-pickers">
           {!isMobile && <button type="button" className="btn-primary" onClick={() => folderInput.current.click()}>选择文件夹</button>}
-          <button type="button" className={isMobile ? 'btn-primary' : 'btn-secondary'} onClick={() => fileInput.current.click()}>选择 PDF 文件</button>
+          <button type="button" className={isMobile ? 'btn-primary' : 'btn-secondary'} onClick={() => fileInput.current.click()}>选择文件</button>
         </div>
       </div>}
 
       {rows && !running && !result && <>
         <p className="cr-batch-summary">
-          {rows.length ? `共 ${rows.length} 个编号、${plan.files} 份 PDF（${formatSize(plan.bytes)}）：新建病历 ${plan.created} 份，追加到已有病历 ${plan.appended} 份。` : '没有找到可以导入的 PDF。'}
-          {ignored > 0 && `已跳过 ${ignored} 个不是 PDF 或隐藏的文件。`}
+          {rows.length ? `共 ${rows.length} 个编号、${plan.files} 份文件（${formatSize(plan.bytes)}）：新建病历 ${plan.created} 份，追加到已有病历 ${plan.appended} 份。` : '没有找到可以导入的文件。'}
+          {ignored > 0 && `已跳过 ${ignored} 个格式不支持或隐藏的文件。`}
         </p>
         {plan.created > 0 && <label className="cr-field"><span>新建病历的审阅人</span><select value={reviewerId} onChange={event => setReviewerId(event.target.value)}>
           <option value="">暂不指派</option>
@@ -176,7 +178,7 @@ export default function BatchImportModal({ projectId, cases, reviewers, onClose,
             <div className="cr-batch-row">
               <input className="cr-batch-code" value={row.code} onChange={event => update(index, { code: event.target.value })} disabled={!row.include} aria-label="编号" />
               <span className={`cr-batch-status${plan.status[index].error ? ' cr-danger' : ''}`}>{plan.status[index].error || plan.status[index].text}</span>
-              <details><summary>{row.items.length} 份 PDF · {formatSize(sizeOf(row.items))}</summary>
+              <details><summary>{row.items.length} 份文件 · {formatSize(sizeOf(row.items))}</summary>
                 <ul>{row.items.map((item, i) => <li key={i}>{item.name}</li>)}</ul>
               </details>
             </div>
@@ -184,7 +186,7 @@ export default function BatchImportModal({ projectId, cases, reviewers, onClose,
         </ul>}
         <div className="modal-actions">
           <button type="button" className="text-button" onClick={() => setRows(null)}>重新选择</button>
-          <button type="button" className="btn-primary" disabled={!plan.files || plan.invalid > 0} onClick={start}>开始导入{plan.files ? `（${plan.files} 份 PDF）` : ''}</button>
+          <button type="button" className="btn-primary" disabled={!plan.files || plan.invalid > 0} onClick={start}>开始导入{plan.files ? `（${plan.files} 份文件）` : ''}</button>
         </div>
       </>}
 
@@ -196,7 +198,7 @@ export default function BatchImportModal({ projectId, cases, reviewers, onClose,
       </div>}
 
       {result && <div className="cr-batch-result">
-        <p>{result.stopped ? '已停止。' : '导入完成。'}新建病历 {result.created} 份，上传 PDF {result.uploaded} 个{result.skipped ? `，跳过同名 ${result.skipped} 个` : ''}{leftoverCount ? `，还有 ${leftoverCount} 个没传上` : ''}。</p>
+        <p>{result.stopped ? '已停止。' : '导入完成。'}新建病历 {result.created} 份，上传文件 {result.uploaded} 个{result.skipped ? `，跳过同名 ${result.skipped} 个` : ''}{leftoverCount ? `，还有 ${leftoverCount} 个没传上` : ''}。</p>
         {result.failures.length > 0 && <ul className="cr-batch-failures">{result.failures.map((failure, index) => <li key={index}>{failure.code} / {failure.name}：{failure.message}</li>)}</ul>}
         <div className="modal-actions">
           {leftoverCount > 0 && <button type="button" className="text-button" onClick={() => run(result.leftover)}>{result.stopped ? '继续上传' : '重试'}剩下的 {leftoverCount} 个</button>}

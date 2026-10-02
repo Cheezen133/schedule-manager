@@ -157,6 +157,7 @@
 .cr-viewer-status { color: white; padding: 2rem 1rem; text-align: center; }
 .cr-page { position: relative; flex: none; background: white; box-shadow: 0 1px 4px rgba(0, 0, 0, .35); }
 .cr-page canvas { display: block; }
+.cr-download-preview { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; min-height: 240px; padding: 2rem 1rem; text-align: center; overflow-wrap: anywhere; background: white; border-radius: var(--radius); }
 .cr-page-number { position: absolute; right: 6px; bottom: 4px; font-size: .7rem; color: var(--gray-400); pointer-events: none; }
 .cr-page-overlay { position: absolute; inset: 0; }
 .cr-mode-point { cursor: crosshair; }

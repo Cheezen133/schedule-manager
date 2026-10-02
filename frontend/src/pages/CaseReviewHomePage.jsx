@@ -22,7 +22,7 @@ export default function CaseReviewHomePage() {
 
   const meta = project => `成员 ${project.member_count} · 病历 ${project.case_count}`
   return <div className="memo-page cr-home">
-    {!isMobile && <div className="memo-header"><div><h2>病历审阅</h2><p>上传病历 PDF，由审阅人批注并给出是否纳入与病因诊断；每日汇报记录纳入进度。</p></div><button type="button" className="btn-primary" onClick={() => setCreating(true)}>新建项目</button></div>}
+    {!isMobile && <div className="memo-header"><div><h2>病历审阅</h2><p>上传病历文件，由审阅人批注并给出是否纳入与病因诊断；每日汇报记录纳入进度。</p></div><button type="button" className="btn-primary" onClick={() => setCreating(true)}>新建项目</button></div>}
     {error && <div className="error-message">{error}</div>}
     {projects && !projects.length && <div className="empty-state cr-empty">还没有项目。新建一个项目，把审阅人加为成员后，就可以上传病历了。</div>}
     {projects?.length > 0 && <div className="cr-project-list">

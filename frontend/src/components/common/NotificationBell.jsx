@@ -55,7 +55,7 @@ export default function NotificationBell({ unreadCount = 0, setUnreadCount }) {
     // 聊天通知跳转到聊天页
     if (notif.related_url) {
       navigate(notif.related_url)
-    } else if (notif.type === 'chat_message' || notif.type === 'friend_request') {
+    } else if (notif.type === 'chat_message' || notif.type === 'chat_mention' || notif.type === 'friend_request') {
       navigate('/chat')
     } else if (notif.related_schedule_id) {
       navigate(`/schedules/${notif.related_schedule_id}`)
@@ -79,6 +79,7 @@ export default function NotificationBell({ unreadCount = 0, setUnreadCount }) {
       reminder: '⏰',
       system: '📢',
       chat_message: '💬',
+      chat_mention: '💬',
       friend_request: '👥',
       management_request: '📅',
       management_approved: '✅',

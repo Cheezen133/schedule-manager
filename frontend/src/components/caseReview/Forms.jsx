@@ -1,3 +1,4 @@
+import { CASE_FILE_ACCEPT, CASE_FILE_HINT } from './fileFormats'
 import { useRef, useState } from 'react'
 import { createReviewCase, createReviewProject, updateReviewCase, updateReviewProject, uploadCaseFiles } from '../../api/caseReview'
 import { errorText, progressText } from './common'
@@ -31,14 +32,14 @@ export function ProjectFormModal({ project, onClose, onSaved }) {
       <label className="cr-field"><span>说明（选填）</span><textarea rows={3} value={description} onChange={event => setDescription(event.target.value)} placeholder="审阅范围、要求等" /></label>
       {canSetPublic && <div className="cr-field">
         <div className="cr-permission-list"><label className="cr-permission"><span>演示项目：所有人可见</span><input type="checkbox" role="switch" checked={isPublic} onChange={event => setIsPublic(event.target.checked)} /></label></div>
-        <small className="cr-muted">打开后，所有登录用户都能查看其中的全部病历、PDF、批注和汇报，但不能修改。只放演示用的假病历。</small>
+        <small className="cr-muted">打开后，所有登录用户都能查看其中的全部病历、文件、批注和汇报，但不能修改。只放演示用的假病历。</small>
       </div>}
       <div className="modal-actions"><button type="button" className="btn-secondary" onClick={onClose}>取消</button><button className="btn-primary" disabled={saving || !name.trim()}>{saving ? '保存中…' : '保存'}</button></div>
     </form>
   </div>
 }
 
-// 新建／编辑病历；新建时可以顺便选好 PDF 一起上传。defaultCode：新建时预填的编号（项目里已有编号的下一个）
+// 新建／编辑病历；新建时可以顺便选好文件一起上传。defaultCode：新建时预填的编号（项目里已有编号的下一个）
 export function CaseFormModal({ projectId, members, reviewCase, defaultCode = '', onClose, onSaved }) {
   const editing = Boolean(reviewCase)
   const [values, setValues] = useState({ code: reviewCase?.code || defaultCode, title: reviewCase?.title || '', note: reviewCase?.note || '', reviewer_id: reviewCase?.reviewer?.id ?? '' })
@@ -59,7 +60,7 @@ export function CaseFormModal({ projectId, members, reviewCase, defaultCode = ''
       if (files.length) await uploadCaseFiles(caseId, files, progressEvent => setProgress(progressText(progressEvent)))
       onSaved(caseId)
     } catch (err) {
-      setError(createdId.current ? `病历已建好，但 PDF 上传失败：${errorText(err)}。可以重试上传。` : errorText(err))
+      setError(createdId.current ? `病历已建好，但文件上传失败：${errorText(err)}。可以重试上传。` : errorText(err))
       setSaving(false)
     }
   }
@@ -74,7 +75,8 @@ export function CaseFormModal({ projectId, members, reviewCase, defaultCode = ''
         {members.map(member => <option key={member.id} value={member.id}>{member.nickname}{member.username ? `（@${member.username}）` : ''}</option>)}
       </select></label>
       <label className="cr-field"><span>备注（选填）</span><textarea rows={3} value={values.note} onChange={set('note')} placeholder="给审阅人的说明" disabled={Boolean(createdId.current)} /></label>
-      {!editing && <label className="cr-field"><span>病历 PDF（选填，可多选）</span><input type="file" accept="application/pdf,.pdf" multiple onChange={event => setFiles(Array.from(event.target.files || []))} /></label>}
+      {!editing && <label className="cr-field"><span>病历文件（选填，可多选）</span><input type="file" accept={CASE_FILE_ACCEPT} multiple onChange={event => setFiles(Array.from(event.target.files || []))} /></label>}
+      {!editing && <p className="cr-muted">{CASE_FILE_HINT}</p>}
       <div className="modal-actions">
         {saving && progress && <span className="cr-progress">上传中 {progress}</span>}
         <button type="button" className="btn-secondary" onClick={onClose}>取消</button>
@@ -84,7 +86,7 @@ export function CaseFormModal({ projectId, members, reviewCase, defaultCode = ''
   </div>
 }
 
-// 写批注：draft 是在 PDF 上点出或框出的位置。新批注可以附一段录音；allowEmpty 用于修改语音批注（文字可删空）
+// 写批注：draft 是在文件上点出或框出的位置。新批注可以附一段录音；allowEmpty 用于修改语音批注（文字可删空）
 export function AnnotationEditor({ draft, initialContent = '', allowEmpty = false, onCancel, onSave }) {
   const [content, setContent] = useState(initialContent)
   const [voice, setVoice] = useState(null)

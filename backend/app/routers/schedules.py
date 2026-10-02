@@ -147,6 +147,7 @@ def remove(schedule_id: int, db: Session = Depends(get_db), current_user: User =
 def complete(schedule_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     schedule = get_schedule_by_id(db, schedule_id)
     if not schedule or not can_view_schedule(db, schedule, current_user.id): raise HTTPException(403, "Not allowed")
+    if schedule.status != "confirmed": raise HTTPException(400, "只能标记已确认的日程为完成")
     return {"code": 0, "data": _schedule_to_response(toggle_complete(db, schedule, current_user.id))}
 
 

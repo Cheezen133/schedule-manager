@@ -11,6 +11,7 @@ const WEEKDAY_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五
 const STATUS_LABELS = { pending: '待审核', rejected: '已驳回' }
 const LEGEND = [
   ['已确认', getEventColors({ status: 'confirmed' }).border, 'confirmed'],
+  ['已完成', getEventColors({ is_completed: true }).border, 'completed'],
   ['待审核', getEventColors({ status: 'pending' }).border, 'pending'],
   ['已驳回', getEventColors({ status: 'rejected' }).border, null],
   ['重要', getEventColors({ is_important: true }).border, 'important'],
@@ -143,7 +144,7 @@ export default function MobileCalendar({ schedules, error, selectedUserId, manag
       {dayItems.map(item => {
         const { schedule } = item
         const [from, to] = timeLabels(item, selectedDay)
-        const meta = [schedule.is_busy_placeholder && '忙碌', STATUS_LABELS[schedule.status], schedule.is_important && '重要', schedule.category_name].filter(Boolean).join(' · ')
+        const meta = [schedule.is_busy_placeholder && '忙碌', schedule.is_completed ? '已完成' : STATUS_LABELS[schedule.status], schedule.is_important && !schedule.is_completed && '重要', schedule.category_name].filter(Boolean).join(' · ')
         const content = <>
           <span className="m-cal-event-bar" style={{ background: getEventColors(schedule).border }} />
           <span className="m-cal-event-main">

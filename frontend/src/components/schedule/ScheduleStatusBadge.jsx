@@ -1,6 +1,7 @@
 const STATUS_MAP = {
   pending: { label: '待审核', className: 'status-pending' },
   confirmed: { label: '已确认', className: 'status-confirmed' },
+  completed: { label: '已完成', className: 'status-completed' },
   rejected: { label: '已驳回', className: 'status-rejected' },
   cancelled: { label: '已取消', className: 'status-cancelled' },
 }

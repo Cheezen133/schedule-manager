@@ -8,13 +8,13 @@ import { formatBeijingDateTime } from '../../utils/dateTime'
  */
 export default function ScheduleCard({ schedule, showReviewActions, onApprove, onReject }) {
   return (
-    <div className={`schedule-card ${schedule.is_important ? 'important' : ''} ${schedule.visibility === 'admin_only' ? 'admin-only' : ''}`}>
+    <div className={`schedule-card ${schedule.is_important && !schedule.is_completed ? 'important' : ''} ${schedule.visibility === 'admin_only' ? 'admin-only' : ''}`}>
       <h3>
-        {schedule.is_important && <span className="important-icon" title="重要日程">🔴</span>}
+        {schedule.is_important && !schedule.is_completed && <span className="important-icon" title="重要日程">🔴</span>}
         <Link to={`/schedules/${schedule.id}`} style={{ color: 'inherit' }}>
           {schedule.title}
         </Link>
-        <ScheduleStatusBadge status={schedule.status} />
+        <ScheduleStatusBadge status={schedule.is_completed ? 'completed' : schedule.status} />
         {schedule.visibility === 'admin_only' && (
           <span style={{
             background: '#f3e8ff', color: '#7c3aed', padding: '0.125rem 0.5rem',

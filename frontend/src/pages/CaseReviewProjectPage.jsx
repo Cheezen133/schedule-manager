@@ -107,7 +107,7 @@ export default function CaseReviewProjectPage() {
         {visibleCases.map(item => <Link key={item.id} to={`/case-review/${projectId}/cases/${item.id}`} className="cr-case-row">
           <div className="cr-case-main">
             <div className="cr-case-title"><strong>{item.code}</strong>{item.title && <span>{item.title}</span>}</div>
-            <div className="cr-case-meta">审阅人：{item.reviewer?.nickname || '未指派'} · PDF {item.file_count} · 批注 {item.annotation_count}</div>
+            <div className="cr-case-meta">审阅人：{item.reviewer?.nickname || '未指派'} · 文件 {item.file_count} · 批注 {item.annotation_count}</div>
             {item.conclusion?.diagnosis && <div className="cr-case-diagnosis">病因诊断：{item.conclusion.diagnosis}</div>}
           </div>
           <StatusPill status={item.status} label={item.status_label} />
@@ -121,6 +121,6 @@ export default function CaseReviewProjectPage() {
     {batchOpen && <BatchImportModal projectId={project.id} cases={cases} reviewers={reviewers} onClose={() => setBatchOpen(false)} onImported={loadCases} />}
     {projectForm && <ProjectFormModal project={project} onClose={() => setProjectForm(false)} onSaved={() => { setProjectForm(false); loadProject() }} />}
     {menuOpen && <MobileActionSheet title={project.name} actions={menuActions} onClose={() => setMenuOpen(false)} />}
-    <ConfirmDialog open={confirmDelete} danger title="删除项目" message={`删除「${project.name}」会同时删除其中全部病历、PDF、批注、结论和每日汇报，无法恢复。`} confirmText="删除" onConfirm={removeProject} onCancel={() => setConfirmDelete(false)} />
+    <ConfirmDialog open={confirmDelete} danger title="删除项目" message={`删除「${project.name}」会同时删除其中全部病历、文件、批注、结论和每日汇报，无法恢复。`} confirmText="删除" onConfirm={removeProject} onCancel={() => setConfirmDelete(false)} />
   </div>
 }

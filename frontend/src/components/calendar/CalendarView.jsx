@@ -11,6 +11,9 @@ export function getEventColors(schedule) {
   if (schedule.is_busy_placeholder) {
     return { bg: '#e5e7eb', border: '#9ca3af', text: '#6b7280' }
   }
+  if (schedule.is_completed) {
+    return { bg: '#f3f4f6', border: '#9ca3af', text: '#6b7280' }
+  }
   if (schedule.is_important) {
     return { bg: '#fee2e2', border: '#dc2626', text: '#991b1b' }
   }

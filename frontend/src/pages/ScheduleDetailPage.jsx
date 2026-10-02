@@ -4,7 +4,7 @@ import Loading from '../components/common/Loading'
 import ScheduleCard from '../components/schedule/ScheduleCard'
 import ContactCopyButton from '../components/schedule/ContactCopyButton'
 import ReviewActionBar from '../components/schedule/ReviewActionBar'
-import { getScheduleDetail, deleteSchedule, approveSchedule, rejectSchedule } from '../api/schedules'
+import { getScheduleDetail, deleteSchedule, approveSchedule, rejectSchedule, toggleComplete } from '../api/schedules'
 import AttachmentsPanel from '../components/schedule/AttachmentsPanel'
 import { useAuth } from '../contexts/AuthContext'
 import { ConfirmDialog } from '../components/common/Ui'
@@ -22,6 +22,7 @@ export default function ScheduleDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [changingCompletion, setChangingCompletion] = useState(false)
 
   useEffect(() => { loadSchedule() }, [id])
 
@@ -60,10 +61,24 @@ export default function ScheduleDetailPage() {
     navigate(`/schedules/${id}/edit`)
   }
 
+  const handleToggleComplete = async () => {
+    if (changingCompletion) return
+    setChangingCompletion(true)
+    try {
+      const result = await toggleComplete(id)
+      setSchedule(result.data)
+    } catch (err) {
+      alert(err.userMessage || '更新完成状态失败')
+    } finally {
+      setChangingCompletion(false)
+    }
+  }
+
   const isScheduleOwner = user && schedule && Number(user.id) === Number(schedule.created_by)
   // reader 不能编辑自己的日程；作为有效管理者查看他人详情时仍可代为编辑。
   const canEdit = user && schedule && !schedule.is_busy_placeholder && (!isScheduleOwner || user.role !== 'reader')
   const canDelete = user && schedule && !schedule.is_busy_placeholder
+  const canComplete = canEdit && schedule.status === 'confirmed'
   // 代为修改的日程只能由拥有者确认；其他待审日程沿用管理员/阅读者审核。
   const canReview = Boolean(schedule && schedule.status === 'pending' && (
     (schedule.requires_owner_review && user?.id === schedule.created_by) ||
@@ -94,6 +109,9 @@ export default function ScheduleDetailPage() {
         <MobileScheduleDetail
           schedule={schedule}
           canDelete={canDelete}
+          canComplete={canComplete}
+          changingCompletion={changingCompletion}
+          onToggleComplete={handleToggleComplete}
           reviewTitle={canReview ? (schedule.requires_owner_review ? '确认他人修改' : '审核操作') : null}
           onApprove={handleApprove}
           onReject={handleReject}
@@ -126,6 +144,7 @@ export default function ScheduleDetailPage() {
 
       {/* 操作按钮 */}
       <div style={{ marginTop: '1rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+        {canComplete && <button className="btn-secondary" onClick={handleToggleComplete} disabled={changingCompletion}>{schedule.is_completed ? '取消已完成' : '标记为已完成'}</button>}
         {canEdit && (
           <button className="btn-submit" onClick={handleEdit}>
             编辑日程
@@ -195,9 +214,9 @@ function describeWhen(schedule) {
 /**
  * 手机端日程详情（仿 iOS 日历）：内容与网页端一致，审核、附件、复制等沿用同一批组件
  */
-function MobileScheduleDetail({ schedule, canDelete, reviewTitle, onApprove, onReject, onDelete }) {
+function MobileScheduleDetail({ schedule, canDelete, canComplete, changingCompletion, onToggleComplete, reviewTitle, onApprove, onReject, onDelete }) {
   const [dateLine, timeLine] = describeWhen(schedule)
-  const [statusLabel, statusTone] = STATUS_PILLS[schedule.status] || [schedule.status, 'gray']
+  const [statusLabel, statusTone] = schedule.is_completed ? ['已完成', 'gray'] : STATUS_PILLS[schedule.status] || [schedule.status, 'gray']
   const hasCustomer = schedule.external_contact_name || schedule.external_contact_phone
 
   return (
@@ -208,7 +227,7 @@ function MobileScheduleDetail({ schedule, canDelete, reviewTitle, onApprove, onR
         <p>{timeLine}{!schedule.is_all_day && <small> 北京时间</small>}</p>
         <div className="m-pills">
           <span className={`m-pill m-pill-${statusTone}`}>{statusLabel}</span>
-          {schedule.is_important && <span className="m-pill m-pill-red">重要</span>}
+          {schedule.is_important && !schedule.is_completed && <span className="m-pill m-pill-red">重要</span>}
           {schedule.category_name && <span className="m-pill m-pill-gray"><i style={{ background: schedule.category_color }} />{schedule.category_name}</span>}
         </div>
       </section>
@@ -249,6 +268,7 @@ function MobileScheduleDetail({ schedule, canDelete, reviewTitle, onApprove, onR
       <div className="m-attachments"><AttachmentsPanel scheduleId={Number(schedule.id)} customerPhone={schedule.external_contact_phone} /></div>
 
       <section className="m-list"><CopyScheduleInfoButton schedule={schedule} label="复制日程信息" /></section>
+      {canComplete && <section className="m-list"><button type="button" className="m-cell m-cal-action" onClick={onToggleComplete} disabled={changingCompletion}>{changingCompletion ? '保存中…' : schedule.is_completed ? '取消已完成' : '标记为已完成'}</button></section>}
       {canDelete && <section className="m-list"><button type="button" className="m-cell m-cell-danger" onClick={onDelete}>删除日程</button></section>}
     </div>
   )
@@ -328,7 +348,7 @@ function CopyScheduleInfoButton({ schedule, label = '📋 复制日程信息' })
       schedule.is_important ? '【重要日程】' : '',
       `时间: ${formatDt(schedule.start_time)} ~ ${formatDt(schedule.end_time)}`,
       schedule.is_all_day ? '(全天)' : '',
-      `状态: ${statusMap[schedule.status] || schedule.status}`,
+      `状态: ${schedule.is_completed ? '已完成' : statusMap[schedule.status] || schedule.status}`,
       `创建人: ${schedule.creator_name || '未知'}`,
       schedule.description ? `描述: ${schedule.description}` : '',
       schedule.external_contact_name ? `联系人: ${schedule.external_contact_name}` : '',

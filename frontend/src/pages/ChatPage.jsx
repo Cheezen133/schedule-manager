@@ -156,6 +156,8 @@ export default function ChatPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [messages, setMessages] = useState([])
   const [text, setText] = useState('')
+  const [mention, setMention] = useState(null)
+  const [mentionIndex, setMentionIndex] = useState(0)
   const [pendingDeleteId, setPendingDeleteId] = useState(null)
   const [pendingRecallMessage, setPendingRecallMessage] = useState(null)
   const [mediaFile, setMediaFile] = useState(null)
@@ -214,10 +216,20 @@ export default function ChatPage() {
   const debouncedFriendSearch = useDebouncedValue(showNewChat ? searchTerm.trim() : '', 400)
 
   const msgListRef = useRef(null)
+  const textInputRef = useRef(null)
   const fileInputRef = useRef(null)
   const docFileInputRef = useRef(null)
   const sharedFileInputRef = useRef(null)
   const latestMessageIdRef = useRef(null)
+
+  useEffect(() => {
+    const input = textInputRef.current
+    if (!input) return
+    input.style.height = 'auto'
+    input.style.height = `${Math.min(input.scrollHeight, 128)}px`
+  }, [text, activeId])
+
+  useEffect(() => { setMention(null) }, [activeId])
 
   useEffect(() => {
     let active = true
@@ -420,7 +432,35 @@ export default function ChatPage() {
     const trimmed = text.trim()
     if (!trimmed || !activeId || sending) return
     setSending(true)
-    try { await sendTextMessage(activeId, trimmed); setText(''); fetchMessages(activeId); fetchConvs() } catch (err) { alert(err.userMessage || '发送失败') } finally { setSending(false) }
+    try { await sendTextMessage(activeId, trimmed); setText(''); setMention(null); fetchMessages(activeId); fetchConvs() } catch (err) { alert(err.userMessage || '发送失败') } finally { setSending(false) }
+  }
+
+  const updateMention = (value, caret) => {
+    if (!convs.find(item => item.id === activeId)?.partner?.is_group) { setMention(null); return }
+    const prefix = value.slice(0, caret)
+    const match = prefix.match(/(?:^|\s)@([^\s@]*)$/u)
+    setMention(match ? { start: caret - match[1].length - 1, end: caret, query: match[1] } : null)
+    setMentionIndex(0)
+  }
+
+  const selectMention = member => {
+    if (!mention) return
+    const token = `@${member.username || `#${member.id}`} `
+    const next = text.slice(0, mention.start) + token + text.slice(mention.end)
+    const caret = mention.start + token.length
+    setText(next)
+    setMention(null)
+    requestAnimationFrame(() => { textInputRef.current?.focus(); textInputRef.current?.setSelectionRange(caret, caret) })
+  }
+
+  const openMentions = () => {
+    const caret = textInputRef.current?.selectionStart ?? text.length
+    const separator = caret > 0 && !/\s/u.test(text[caret - 1]) ? ' ' : ''
+    const start = caret + separator.length
+    setText(text.slice(0, caret) + separator + '@' + text.slice(caret))
+    setMention({ start, end: start + 1, query: '' })
+    setMentionIndex(0)
+    requestAnimationFrame(() => { textInputRef.current?.focus(); textInputRef.current?.setSelectionRange(start + 1, start + 1) })
   }
 
   const handleFileSelect = (e) => {
@@ -431,6 +471,7 @@ export default function ChatPage() {
   }
 
   const handlePaste = (e) => {
+    if (e.clipboardData?.getData('text/plain')) return
     const imageItem = Array.from(e.clipboardData?.items || []).find((item) => item.type.startsWith('image/'))
     if (!imageItem) return
     const blob = imageItem.getAsFile()
@@ -718,6 +759,9 @@ export default function ChatPage() {
   const favoriteFetch = async () => { setFavLoading(true); try { const res = await getFavorites(); setFavorites(res.data || []) } finally { setFavLoading(false); setShowFavPanel(true) } }
 
   const activeConv = convs.find((c) => c.id === activeId)
+  const mentionOptions = mention && activeConv?.partner?.is_group
+    ? groupMembers.filter(member => member.id !== me?.id && `${member.nickname || ''} ${member.username || ''}`.toLowerCase().includes(mention.query.toLowerCase())).slice(0, 8)
+    : []
   const myGroupRole = groupMembers.find(member => member.id === me?.id)?.role || 'member'
   const groupCanManage = ['owner', 'admin'].includes(myGroupRole)
   const groupIsOwner = myGroupRole === 'owner'
@@ -961,7 +1005,17 @@ export default function ChatPage() {
               )}
               <input ref={fileInputRef} type="file" accept="image/*,video/*" onChange={handleFileSelect} style={{ display: 'none' }} />
               <input ref={docFileInputRef} type="file" onChange={handleFileSelect} style={{ display: 'none' }} />
-              <input className="chat-input-text" value={text} onChange={(e) => setText(e.target.value)} onPaste={handlePaste} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendText() } }} placeholder="输入消息，或直接粘贴图片..." />
+              {activeConv?.partner?.is_group && <button type="button" className="chat-input-media-btn" onClick={openMentions} title="提及群成员" aria-label="提及群成员">@</button>}
+              <div className="chat-composer">
+                {mention && mentionOptions.length > 0 && <div className="chat-mention-list" role="listbox" aria-label="选择要提及的群成员">{mentionOptions.map((member, index) => <button type="button" role="option" aria-selected={index === mentionIndex} className={index === mentionIndex ? 'active' : ''} key={member.id} onMouseDown={event => event.preventDefault()} onClick={() => selectMention(member)}><strong>{member.nickname || member.username || `成员 ${member.id}`}</strong><small>@{member.username || `#${member.id}`}</small></button>)}</div>}
+                <textarea ref={textInputRef} className="chat-input-text" rows={1} value={text} onChange={event => { setText(event.target.value); updateMention(event.target.value, event.target.selectionStart) }} onClick={event => updateMention(event.target.value, event.target.selectionStart)} onPaste={handlePaste} onKeyDown={event => {
+                  if (event.nativeEvent.isComposing) return
+                  if (mention && mentionOptions.length && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) { event.preventDefault(); setMentionIndex(index => (index + (event.key === 'ArrowDown' ? 1 : -1) + mentionOptions.length) % mentionOptions.length); return }
+                  if (mention && mentionOptions.length && event.key === 'Enter') { event.preventDefault(); selectMention(mentionOptions[mentionIndex]); return }
+                  if (mention && event.key === 'Escape') { event.preventDefault(); setMention(null); return }
+                  if (!isMobile && event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); handleSendText() }
+                }} placeholder={isMobile ? '输入消息…' : '输入消息，Shift+Enter 换行'} aria-label="消息内容" />
+              </div>
               <button className="btn-submit" onClick={handleSendText} disabled={!text.trim() || sending}>发送</button>
             </div>
           </div>

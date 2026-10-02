@@ -190,17 +190,93 @@ class CaseReviewTests(unittest.TestCase):
         own_id = self.make_case("5", reviewer=None, user=self.member)
         cr.update_case(own_id, cr.CaseIn(code="6"), db=self.db, current_user=self.member)
 
-    def test_upload_rejects_non_pdf_without_leaving_files(self):
+    def test_upload_rejects_invalid_files_without_leaving_files(self):
         case_id = self.make_case()
+        for name, contents in (("假的.pdf", b"not a pdf"), ("假的.jpg", PDF_BYTES),
+                               ("假的.jpeg", b"text"), ("假的.png", b"text"),
+                               ("脚本.html", b"html"), ("动图.gif", b"GIF89a"),
+                               ("无扩展名", PDF_BYTES), ("空.txt", b""), ("空.pdf", b"")):
+            with self.subTest(name=name):
+                with self.assertRaises(HTTPException) as ctx:
+                    self.upload_pdf(case_id, upload("好的.pdf"), upload("说明.docx", b"document"), upload(name, contents))
+                self.assertEqual(ctx.exception.status_code, 400)
+                self.assertEqual(self.stored_files(), [])
+                self.assertEqual(self.db.query(ReviewCaseFile).count(), 0)
+
+    def test_all_case_file_formats_and_download_types(self):
+        case_id = self.make_case()
+        expected_types = {
+            ".pdf": "application/pdf", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+            ".doc": "application/msword", ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ".xls": "application/vnd.ms-excel", ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ".ppt": "application/vnd.ms-powerpoint", ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            ".txt": "text/plain",
+        }
+        for index, (ext, content_type) in enumerate(expected_types.items()):
+            with self.subTest(extension=ext):
+                contents = PDF_BYTES if ext == ".pdf" else b"\xff\xd8\xfftest" if ext in (".jpg", ".jpeg") else b"\x89PNG\r\n\x1a\ntest" if ext == ".png" else b"document bytes"
+                # 浏览器漏传或错传 MIME 时仍按扩展名保存；同时验证大小写扩展名
+                result = self.upload_pdf(case_id, upload("病历" + ext.upper(), contents, "text/html" if index % 2 else None))
+                self.assertEqual(result["data"]["count"], 1)
+                item = self.db.query(ReviewCaseFile).order_by(ReviewCaseFile.id.desc()).first()
+                self.assertEqual((item.content_type, item.file_size), (content_type, len(contents)))
+                self.assertTrue(item.stored_name.endswith(ext))
+                response = cr.case_file_content(item.id, db=self.db, current_user=self.reviewer)
+                self.assertEqual(response.media_type, content_type)
+                self.assertIn("attachment;", response.headers["content-disposition"])
+                with open(response.path, "rb") as handle:
+                    self.assertEqual(handle.read(), contents)
+        files = cr.get_case(case_id, db=self.db, current_user=self.owner)["data"]["files"]
+        self.assertEqual(len(files), len(expected_types))
+        for item in files:
+            extension = os.path.splitext(item["name"])[1].lower()
+            self.assertEqual(item["content_type"], expected_types[extension])
+            self.assertEqual(item["preview_type"], "pdf" if extension == ".pdf" else "image" if extension in (".jpg", ".jpeg", ".png") else "download")
+        # 老 PDF 记录 MIME 为空也能正确预览，不依赖数据库迁移
+        legacy = self.db.query(ReviewCaseFile).filter(ReviewCaseFile.name == "病历.PDF").one()
+        legacy.content_type = None
+        self.db.commit()
+        self.assertEqual(cr.case_file_dict(legacy, {})["preview_type"], "pdf")
+        self.assertEqual(cr.case_file_content(legacy.id, db=self.db, current_user=self.owner).media_type, "application/pdf")
+
+    def test_image_annotations_pages_permissions_and_cleanup(self):
+        case_id = self.make_case()
+        self.upload_pdf(case_id, upload("检查.PNG", b"\x89PNG\r\n\x1a\ntest"))
+        file_id = self.first_file_id()
+        for kind, width, height in (("point", 0, 0), ("rect", 0.3, 0.2)):
+            cr.create_annotation(file_id, cr.AnnotationIn(page=1, kind=kind, x=0.2, y=0.3, width=width, height=height, content="图片批注"), db=self.db, current_user=self.reviewer)
+        self.voice_note(file_id, self.reviewer)
+        for page in (0, 2):
+            self.assert_status(400, cr.create_annotation, file_id, cr.AnnotationIn(page=page, x=0.2, y=0.3, content="无效页码"), db=self.db, current_user=self.reviewer)
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(cr.create_voice_annotation(file_id, page=page, x=0.2, y=0.3, audio=upload("录音.m4a", b"audio"), db=self.db, current_user=self.reviewer))
+            self.assertEqual(ctx.exception.status_code, 400)
+        self.assertEqual(len(self.stored_files()), 2)
+        self.assert_status(404, cr.case_file_content, file_id, db=self.db, current_user=self.outsider)
+        self.assert_status(404, cr.create_annotation, file_id, cr.AnnotationIn(page=1, x=0.2, y=0.3, content="无权限"), db=self.db, current_user=self.outsider)
+        self.add(self.outsider, ["viewer"])
+        self.assert_status(403, cr.create_annotation, file_id, cr.AnnotationIn(page=1, x=0.2, y=0.3, content="只读"), db=self.db, current_user=self.outsider)
         with self.assertRaises(HTTPException) as ctx:
-            self.upload_pdf(case_id, upload("假的.pdf", b"not a pdf at all"))
-        self.assertEqual(ctx.exception.status_code, 400)
-        with self.assertRaises(HTTPException):
-            self.upload_pdf(case_id, upload("说明.txt", PDF_BYTES))
-        with self.assertRaises(HTTPException):
-            self.upload_pdf(case_id, upload("好的.pdf"), upload("坏的.pdf", b"broken"))
+            self.voice_note(file_id, self.outsider)
+        self.assertEqual(ctx.exception.status_code, 403)
+        self.assert_status(403, cr.delete_case_file, file_id, db=self.db, current_user=self.member)
+        cr.delete_case_file(file_id, db=self.db, current_user=self.owner)
         self.assertEqual(self.stored_files(), [])
-        self.assertEqual(self.db.query(ReviewCaseFile).count(), 0)
+        self.assertEqual(self.db.query(ReviewAnnotation).count(), 0)
+
+    def test_download_only_files_reject_annotations_but_allow_conclusions(self):
+        case_id = self.make_case()
+        for ext in (".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt"):
+            self.upload_pdf(case_id, upload("材料" + ext, b"document"))
+            file_id = self.db.query(ReviewCaseFile.id).order_by(ReviewCaseFile.id.desc()).first()[0]
+            self.assert_status(400, cr.create_annotation, file_id, cr.AnnotationIn(page=1, x=0.2, y=0.3, content="不能批注"), db=self.db, current_user=self.reviewer)
+            with self.assertRaises(HTTPException) as ctx:
+                self.voice_note(file_id, self.reviewer)
+            self.assertEqual(ctx.exception.status_code, 400)
+        self.assertEqual(self.db.query(ReviewAnnotation).count(), 0)
+        self.assertEqual(len(self.stored_files()), 7)
+        cr.save_conclusion(case_id, cr.ConclusionIn(decision="include", comment="下载阅读后纳入"), db=self.db, current_user=self.reviewer)
+        self.assertEqual(cr.get_case(case_id, db=self.db, current_user=self.reviewer)["data"]["status"], "included")
 
     def test_annotations_and_case_deletion_clean_up(self):
         case_id = self.make_case()
@@ -333,6 +409,8 @@ class CaseReviewTests(unittest.TestCase):
         self.assertTrue(body.startswith("﻿编号,"))
         lines = body.lstrip("﻿").splitlines()
         self.assertIn("结论人", lines[0])
+        self.assertIn("文件数", lines[0])
+        self.assertNotIn("PDF 数", lines[0])
         self.assertEqual([line.split(",")[0] for line in lines[1:]], ["1", "2", "10"])
         self.assertIn("已纳入,纳入,肺结核,,导师", lines[2])
 

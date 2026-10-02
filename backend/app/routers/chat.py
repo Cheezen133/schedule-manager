@@ -2,6 +2,7 @@
 聊天路由 — 独立交流平台
 """
 import os
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -212,7 +213,21 @@ def _shared_file_to_dict(item: SharedFile) -> dict:
     }
 
 
-def _notify_partner(db: Session, conv: Conversation, sender_id: int, preview: str):
+def _mentioned_member_ids(db: Session, conv: Conversation, sender_id: int, content: str) -> set[int]:
+    if not conv.is_group or '@' not in content:
+        return set()
+    mentioned = set()
+    members = db.query(ConversationMember).filter(ConversationMember.conversation_id == conv.id).all()
+    for member in members:
+        if member.user_id == sender_id or not member.user:
+            continue
+        token = re.escape(member.user.username or f'#{member.user_id}')
+        if re.search(rf'(?<![A-Za-z0-9_.-])@{token}(?![A-Za-z0-9_.-])', content):
+            mentioned.add(member.user_id)
+    return mentioned
+
+
+def _notify_partner(db: Session, conv: Conversation, sender_id: int, preview: str, mentioned_ids: set[int] | None = None):
     """给对方创建聊天通知"""
     from ..models.notification import Notification
     partner_ids = (
@@ -222,11 +237,12 @@ def _notify_partner(db: Session, conv: Conversation, sender_id: int, preview: st
     sender = db.query(User).filter(User.id == sender_id).first()
     sender_name = sender.nickname if sender else "用户"
     for partner_id in partner_ids:
+        is_mentioned = partner_id in (mentioned_ids or set())
         db.add(Notification(
             user_id=partner_id,
-            title=f"💬 {sender_name} {preview}" if preview else f"💬 {sender_name} 发来消息",
+            title=f"💬 {sender_name} 在群聊中 @了你" if is_mentioned else (f"💬 {sender_name} {preview}" if preview else f"💬 {sender_name} 发来消息"),
             content=preview or "发来消息",
-            type="chat_message",
+            type="chat_mention" if is_mentioned else "chat_message",
             related_schedule_id=None,
             related_url=f"/chat/{conv.id}",
         ))
@@ -832,7 +848,7 @@ async def send_text(
     db.refresh(msg)
 
     # 通知对方
-    _notify_partner(db, conv, current_user.id, f"发来消息：{content.strip()[:50]}")
+    _notify_partner(db, conv, current_user.id, f"发来消息：{content.strip()[:50]}", _mentioned_member_ids(db, conv, current_user.id, content))
 
     return {"code": 0, "message": "发送成功", "data": _msg_to_dict(msg)}
 

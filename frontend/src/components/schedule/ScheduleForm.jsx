@@ -130,6 +130,11 @@ export default function ScheduleForm({ initialData, onSubmit, isEditing = false,
     setCategoryError('')
   }
 
+  const updateCategoryColor = event => {
+    const color = event.target.value
+    setCategoryForm(previous => ({ ...previous, color }))
+  }
+
   const saveCategory = async (event) => {
     event.preventDefault()
     if (!categoryForm.name.trim()) { setCategoryError('请输入分类名称。'); return }
@@ -425,7 +430,8 @@ export default function ScheduleForm({ initialData, onSubmit, isEditing = false,
             <form className="category-manager-form" onSubmit={saveCategory}>
               <label>分类名称 *<input autoFocus value={categoryForm.name} onChange={event => setCategoryForm({ ...categoryForm, name: event.target.value })} maxLength={50} placeholder="例如：工作、家庭、客户" /></label>
               <label>图标<input value={categoryForm.icon} onChange={event => setCategoryForm({ ...categoryForm, icon: event.target.value })} maxLength={10} placeholder="📋" /></label>
-              <label>颜色<input type="color" value={categoryForm.color} onChange={event => setCategoryForm({ ...categoryForm, color: event.target.value })} /></label>
+              <label>图标底色<input type="color" value={categoryForm.color} onInput={updateCategoryColor} onChange={updateCategoryColor} onBlur={updateCategoryColor} /></label>
+              <div className="category-manager-preview wide" style={{ '--category-color': categoryForm.color }}><span className="category-manager-icon">{categoryForm.icon || '📋'}</span><span>图标预览 · {categoryForm.color}</span></div>
               <label className="wide">描述<input value={categoryForm.description} onChange={event => setCategoryForm({ ...categoryForm, description: event.target.value })} maxLength={200} placeholder="可选" /></label>
               <div className="modal-actions wide"><Button variant="primary" type="submit" disabled={categorySaving}>{categorySaving ? '保存中...' : editingCategoryId ? '保存修改' : '新建分类'}</Button>{editingCategoryId && <Button onClick={resetCategoryForm}>取消编辑</Button>}</div>
             </form>

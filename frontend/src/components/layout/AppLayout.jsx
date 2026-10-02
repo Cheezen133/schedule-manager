@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import Header from './Header'
 import Sidebar from './Sidebar'
@@ -13,12 +13,16 @@ export default function AppLayout() {
   const location = useLocation()
   const isMobile = useIsMobile()
   const [notificationCount, setNotificationCount] = useState(0)
+  const notificationVersion = useRef(0)
   const [chatUnreadCount, setChatUnreadCount] = useState(0)
 
   useEffect(() => {
-    const loadNotifications = () => getUnreadCount()
-      .then(response => setNotificationCount(response.data?.count || 0))
+    const loadNotifications = () => {
+      const version = notificationVersion.current
+      return getUnreadCount()
+      .then(response => { if (version === notificationVersion.current) setNotificationCount(response.data?.count || 0) })
       .catch(() => {})
+    }
     const loadChats = () => getConversations()
       .then(response => setChatUnreadCount((response.data || []).filter(item => item.has_unread).length))
       .catch(() => {})
@@ -30,11 +34,17 @@ export default function AppLayout() {
     const notificationTimer = setInterval(() => whenVisible(loadNotifications), 30000)
     const chatTimer = inChatPage ? null : setInterval(() => whenVisible(loadChats), 15000)
     const syncChatUnread = event => setChatUnreadCount(Number(event.detail) || 0)
+    const syncNotificationUnread = event => {
+      notificationVersion.current += 1
+      setNotificationCount(Number(event.detail) || 0)
+    }
     window.addEventListener('chat-unread-count', syncChatUnread)
+    window.addEventListener('notification-unread-count', syncNotificationUnread)
     return () => {
       clearInterval(notificationTimer)
       if (chatTimer) clearInterval(chatTimer)
       window.removeEventListener('chat-unread-count', syncChatUnread)
+      window.removeEventListener('notification-unread-count', syncNotificationUnread)
     }
   }, [location.pathname])
 

@@ -1,5 +1,6 @@
 // 病历编号相关的纯函数（不含界面，便于单独测试）：
 // 新建病历时默认填的下一个编号；批量导入时从文件夹路径或文件名取编号、筛掉不该上传的文件、按编号分组
+import { isSupportedCaseFile } from './fileFormats.js'
 
 // 编号按自然顺序比较：1、2、10，而不是 1、10、2
 export const compareCodes = (a, b) => a.localeCompare(b, 'zh-CN', { numeric: true })
@@ -18,10 +19,10 @@ export function nextCaseCode(codes) {
 }
 
 // 批量导入要跳过的文件：隐藏文件和系统生成的文件夹（名字以「.」开头，如 .DS_Store、._病历.pdf；
-// 苹果电脑解压留下的 __MACOSX），以及不是 PDF 的文件
+// 苹果电脑解压留下的 __MACOSX），以及不支持的文件格式
 export function isImportable(file, path = file.name) {
   if (path.split('/').some(part => part.startsWith('.') || part === '__MACOSX')) return false
-  return /\.pdf$/i.test(file.name) || file.type === 'application/pdf'
+  return isSupportedCaseFile(file)
 }
 
 // 选文件夹时，每个文件带着相对路径（如「总文件夹/123/入院记录.pdf」）：
@@ -33,9 +34,9 @@ export function codeFromPath(path) {
 }
 
 // 直接选文件时，按文件名开头算编号：取第一个下划线或空格之前的部分（123_入院记录.pdf → 123）；
-// 文件名里没有这两种分隔符时，整个文件名（去掉 .pdf）就是编号
+// 文件名里没有这两种分隔符时，整个文件名（去掉扩展名）就是编号
 export function codeFromName(name) {
-  return name.replace(/\.pdf$/i, '').split(/[_＿\s]/)[0].trim()
+  return name.replace(/\.[^.]+$/, '').split(/[_＿\s]/)[0].trim()
 }
 
 // 把选中的文件整理成「每个编号一组」。byFolder：按文件夹导入（否则按文件名开头分组）。

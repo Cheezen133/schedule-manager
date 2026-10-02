@@ -1,19 +1,38 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getNotifications, markNotificationRead, markAllNotificationsRead, deleteNotification } from '../api/notifications'
+import { getNotifications, getUnreadCount, markNotificationRead, markAllNotificationsRead, deleteNotification } from '../api/notifications'
 import Loading from '../components/common/Loading'
+import { notify } from '../components/common/Ui'
+import { useMobileNav } from '../components/mobile/MobileNavBar'
+import useIsMobile from '../hooks/useIsMobile'
 import { formatRelativeTime } from '../utils/dateTime'
 
 export default function NotificationPage() {
   const [notifications, setNotifications] = useState([])
   const [loading, setLoading] = useState(true)
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [markingAll, setMarkingAll] = useState(false)
+  const changeVersion = useRef(0)
+  const isMobile = useIsMobile()
   const navigate = useNavigate()
 
+  const publishUnreadCount = count => {
+    setUnreadCount(count)
+    window.dispatchEvent(new CustomEvent('notification-unread-count', { detail: count }))
+  }
+  const refreshUnreadCount = async () => {
+    const version = changeVersion.current
+    const response = await getUnreadCount()
+    if (version === changeVersion.current) publishUnreadCount(response.data?.count || 0)
+  }
   const fetchData = async () => {
+    const version = changeVersion.current
     try {
-      const res = await getNotifications({ limit: 200 })
+      const [res, count] = await Promise.all([getNotifications({ limit: 200 }), getUnreadCount()])
+      if (version !== changeVersion.current) return
       setNotifications(res.data || [])
-    } catch { /* ignore */ }
+      publishUnreadCount(count.data?.count || 0)
+    } catch { /* The next visible refresh retries. */ }
     finally { setLoading(false) }
   }
 
@@ -25,15 +44,17 @@ export default function NotificationPage() {
 
   const handleClick = async (notif) => {
     if (!notif.is_read) {
-      await markNotificationRead(notif.id)
-      setNotifications(prev =>
-        prev.map(n => (n.id === notif.id ? { ...n, is_read: true } : n))
-      )
+      try {
+        await markNotificationRead(notif.id)
+        changeVersion.current += 1
+        setNotifications(prev => prev.map(n => (n.id === notif.id ? { ...n, is_read: true } : n)))
+      } catch (error) { notify(error.userMessage || '标记已读失败'); return }
+      refreshUnreadCount().catch(() => {})
     }
     // 聊天通知跳转到聊天页
     if (notif.related_url) {
       navigate(notif.related_url)
-    } else if (notif.type === 'chat_message' || notif.type === 'friend_request') {
+    } else if (notif.type === 'chat_message' || notif.type === 'chat_mention' || notif.type === 'friend_request') {
       navigate('/chat')
     } else if (notif.related_schedule_id) {
       navigate(`/schedules/${notif.related_schedule_id}`)
@@ -42,22 +63,37 @@ export default function NotificationPage() {
 
   const handleMarkRead = async (e, notif) => {
     e.stopPropagation()
-    await markNotificationRead(notif.id)
-    setNotifications(prev =>
-      prev.map(n => (n.id === notif.id ? { ...n, is_read: true } : n))
-    )
+    try {
+      await markNotificationRead(notif.id)
+      changeVersion.current += 1
+      setNotifications(prev => prev.map(n => (n.id === notif.id ? { ...n, is_read: true } : n)))
+    } catch (error) { notify(error.userMessage || '标记已读失败'); return }
+    refreshUnreadCount().catch(() => {})
   }
 
   const handleDelete = async (e, notif) => {
     e.stopPropagation()
-    await deleteNotification(notif.id)
-    setNotifications(prev => prev.filter(n => n.id !== notif.id))
+    try {
+      await deleteNotification(notif.id)
+      changeVersion.current += 1
+      setNotifications(prev => prev.filter(n => n.id !== notif.id))
+    } catch (error) { notify(error.userMessage || '删除通知失败'); return }
+    refreshUnreadCount().catch(() => {})
   }
 
   const handleMarkAllRead = async () => {
-    await markAllNotificationsRead()
-    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
+    if (markingAll) return
+    setMarkingAll(true)
+    try {
+      await markAllNotificationsRead()
+      changeVersion.current += 1
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
+      publishUnreadCount(0)
+    } catch (error) { notify(error.userMessage || '全部标记已读失败') }
+    finally { setMarkingAll(false) }
   }
+
+  useMobileNav({ rightLabel: isMobile && unreadCount > 0 ? markingAll ? '处理中…' : '全部已读' : null, onRight: handleMarkAllRead, rightDisabled: markingAll })
 
   const getTypeEmoji = (type) => {
     const map = {
@@ -67,6 +103,7 @@ export default function NotificationPage() {
       reminder: '⏰',
       system: '📢',
       chat_message: '💬',
+      chat_mention: '💬',
       friend_request: '👥',
       management_request: '📅',
       management_approved: '✅',
@@ -78,16 +115,14 @@ export default function NotificationPage() {
     return map[type] || '🔔'
   }
 
-  const unreadCount = notifications.filter(n => !n.is_read).length
-
   if (loading) return <Loading />
 
   return (
     <div className="page-content">
       <div className="notification-page-header">
         <h2>🔔 通知中心</h2>
-        {unreadCount > 0 && (
-          <button className="btn-mark-all-read" onClick={handleMarkAllRead}>
+        {!isMobile && unreadCount > 0 && (
+          <button className="btn-mark-all-read" onClick={handleMarkAllRead} disabled={markingAll}>
             全部已读 ({unreadCount})
           </button>
         )}

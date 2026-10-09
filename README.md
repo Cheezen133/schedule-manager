@@ -1,87 +1,31 @@
 # 日程管理系统
 
-团队日程管理平台 — 支持录入、审核、日历展示和 iCal 导出。
+团队日程管理平台，线上部署于 **https://ruiyu.work**。
 
 ## 功能特性
 
-- 📱 **手机号验证码登录** — 安全便捷的身份认证
-- 👥 **双角色体系** — 录入者（Writer）添加日程，阅读者（Reader）审核决定
-- ✅ **审核流程** — 录入者提交 → 阅读者批准/驳回，最终决定权归阅读者
-- 📅 **日历展示** — FullCalendar 月/周/日视图，日程按状态着色
-- 🔴 **重要标记** — 重要日程红色高亮，置顶显示
-- 📤 **iCal 导出** — 一键导出 .ics 文件，可导入 Apple/Google/Outlook 日历
-- 📋 **号码复制** — 外部联系人电话一键复制
+**日程核心**
+- 📱 手机号验证码登录，JWT 认证
+- 👥 三角色体系：`admin` / `reader`（审核批准、驳回）/ `writer`（录入日程）
+- 📅 FullCalendar 月/周/日视图，日程按状态着色，重要日程红色置顶
+- 📤 iCal 导出（.ics 可导入 Apple/Google/Outlook 日历）
+- 📋 外部联系人电话一键复制、微信跳转
+
+**协作模块**
+- 💬 独立聊天：私聊/群聊、图片/PDF/语音多媒体消息、共享文件、收藏
+- 📝 备忘录：个人备忘、团队备忘、文件归档、收藏夹
+- 🏥 患者管理：患者档案、分组、时间线
+- 📋 病历审阅：审阅项目、病例文件、批注、结论、日报
+- 📱 移动端适配（MobileActionSheet、长按手势等）
 
 ## 技术栈
 
-- **后端**: Python FastAPI + SQLAlchemy + SQLite
-- **前端**: React 18 + Vite + FullCalendar
-- **认证**: JWT Token
-
-## 快速开始
-
-### 1. 安装后端依赖
-
-```bash
-cd backend
-pip install -r requirements.txt
-```
-
-### 2. 启动后端
-
-```bash
-cd backend
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-### 3. 安装前端依赖
-
-```bash
-cd frontend
-npm install
-```
-
-### 4. 启动前端
-
-```bash
-cd frontend
-npm run dev
-```
-
-### 5. 访问网站
-
-打开浏览器访问 `http://localhost:5173`
-
-## 使用说明
-
-### 首次使用
-
-1. 输入手机号 → 获取验证码（开发环境验证码为 `123456`）
-2. 输入验证码 → 登录（首次登录自动注册为"录入者"）
-3. 使用命令行工具提升为"阅读者"：
-
-```bash
-cd backend
-python scripts/promote_user.py --phone 你的手机号 --role reader
-```
-
-### 录入者操作
-
-1. 点击侧边栏「新建日程」
-2. 填写日程信息（标题、时间、重要标记、外部联系人等）
-3. 提交后状态为"待审核"
-
-### 阅读者操作
-
-1. 点击侧边栏「待审核」查看待审核列表
-2. 重要日程自动置顶
-3. 点击「批准」或「驳回」，可添加审核备注
-
-### 导出日历
-
-1. 在日历页面点击「导出 iCal」按钮
-2. 下载 .ics 文件
-3. 导入到 Apple 日历 / Google 日历 / Outlook
+| 层 | 技术 |
+|---|---|
+| 后端 | Python FastAPI + SQLAlchemy + Pydantic |
+| 数据库 | MySQL（生产，`schedule_manager` 库）/ SQLite（本地开发可用） |
+| 前端 | React 18 + Vite + React Router 6 + FullCalendar + axios |
+| 认证 | JWT（手机号 + 验证码） |
 
 ## 项目结构
 
@@ -89,36 +33,62 @@ python scripts/promote_user.py --phone 你的手机号 --role reader
 schedule-manager/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py           # FastAPI 入口
-│   │   ├── config.py         # 配置
-│   │   ├── database.py       # 数据库
-│   │   ├── models/           # ORM 模型
-│   │   ├── schemas/          # Pydantic 模型
-│   │   ├── routers/          # API 路由
-│   │   ├── services/         # 业务逻辑
-│   │   └── utils/            # 工具函数
-│   └── scripts/              # 命令行工具
+│   │   ├── main.py          # FastAPI 入口
+│   │   ├── config.py        # 配置（读 .env）
+│   │   ├── models/          # ORM 模型（user/schedule/chat/memo/patient/case_review...）
+│   │   ├── schemas/         # Pydantic 模型
+│   │   ├── routers/         # API 路由（auth/schedules/chat/memos/case_review/...）
+│   │   ├── services/        # 业务逻辑
+│   │   └── utils/           # JWT 等工具
+│   ├── scripts/             # 命令行工具（如 promote_user.py 提升角色）
+│   └── uploads/             # 用户上传文件（gitignored，含患者资料，严禁入库）
 ├── frontend/
 │   └── src/
-│       ├── pages/            # 页面组件
-│       ├── components/       # 通用组件
-│       ├── api/              # API 调用
-│       └── contexts/         # React Context
-└── README.md
+│       ├── pages/           # 页面组件
+│       ├── components/      # layout/schedule/calendar/chat/memo/caseReview/mobile
+│       ├── api/             # axios 调用封装（baseURL /api/v1）
+│       ├── contexts/        # AuthContext
+│       └── hooks/ utils/
+├── backup.sh                # 数据备份（MySQL 全库 + uploads）
+├── update.sh                # 一键部署（备份→拉代码→构建→发布→重启→健康检查）
+└── AGENTS.md                # AI 代理工作指引（数据红线、部署流程）
 ```
+
+## 本地开发
+
+```bash
+# 后端（127.0.0.1 调试，公网访问请走 SSH 隧道）
+cd backend && pip install -r requirements.txt
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000   # API 文档: /docs
+
+# 前端
+cd frontend && npm install && npm run dev    # http://localhost:5173
+```
+
+- 开发模式（`DEV_MODE=true`）验证码固定 `123456`
+- 首次登录默认为 `writer`，提升角色：
+  `cd backend && python scripts/promote_user.py --phone 手机号 --role admin`
+
+## 生产部署（当前线上架构）
+
+单台服务器，nginx 443 → 前端静态（`/var/www/schedule-manager/`）+ `/api` 反代 FastAPI（systemd 服务 `schedule-manager`，127.0.0.1:8080）。
+
+```bash
+# 日常上线（在服务器项目根目录）
+git switch main && git merge dev && git push origin main
+bash update.sh        # 自动：备份→拉代码→装依赖→构建→发布→重启→健康检查
+```
+
+> ⚠️ 所有操作规范（尤其**用户数据红线**）见 [AGENTS.md](AGENTS.md)。
 
 ## 环境变量
 
-| 变量 | 说明 | 默认值 |
+配置通过 `.env` 读取（真实生产配置只存在于服务器，不进仓库）：
+
+| 变量 | 说明 | 生产值示例 |
 |---|---|---|
-| DATABASE_URL | 数据库连接 | sqlite:///./schedule_manager.db |
-| JWT_SECRET_KEY | JWT 密钥 | (开发默认值) |
-| JWT_EXPIRE_HOURS | JWT 过期时间 | 24 |
-| DEV_MODE | 开发模式 | true |
-| CORS_ORIGINS | CORS 白名单 | http://localhost:5173 |
-
-## 开发说明
-
-- 开发模式验证码固定为 `123456`，后端控制台会打印验证码
-- 生产环境需配置真实短信服务（阿里云/腾讯云）
-- 生产环境需修改 JWT_SECRET_KEY 为强密码
+| `DATABASE_URL` | 数据库连接 | `mysql+pymysql://user:***@localhost:3306/schedule_manager` |
+| `JWT_SECRET_KEY` | JWT 签名密钥 | 64 位以上随机字符串 |
+| `JWT_EXPIRE_HOURS` | 令牌有效期 | 168 |
+| `DEV_MODE` | 开发模式（固定验证码） | false |
+| `CORS_ORIGINS` | 跨域白名单 | `*` |

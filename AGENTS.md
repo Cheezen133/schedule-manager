@@ -27,19 +27,24 @@
 | 拷贝前端到 /var/www 时使用 `--delete`（rsync）| `pdfjs/` 等资源不在构建产物里，会被误删 |
 | 直接杀 8080 端口的 uvicorn / 改动 systemd 单元 | 那是线上服务，只能 `systemctl restart schedule-manager` |
 | 从旧 Mac 克隆 push | 该克隆含已清除的旧历史（患者文件+密钥），push 会让清除白做 |
+| 在 worktree 里连生产库 `schedule_manager` | worktree 的 .env 已指向沙盒库 `schedule_manager_dev`，勿改回；测试写入必须只进沙盒 |
+| 在主目录 `/root/schedule-manager` 直接改代码测试 | 主目录锁定 main 供线上运行；改动一律在 worktree `/root/schedule-manager-dev` |
 
 ## 架构与路径
 
 | 组件 | 位置 | 说明 |
 |---|---|---|
+| **主目录（生产）** | `/root/schedule-manager` | **锁定 main 分支**，线上服务从这里跑，日常不在此改代码 |
+| **开发 worktree** | `/root/schedule-manager-dev` | **dev 分支**，所有修改、测试在这里进行 |
 | 前端源码 | `frontend/` | React 18 + Vite，`npm run dev` 本地调试 |
 | 前端线上产物 | `/var/www/schedule-manager/` | 由 update.sh 从 dist 拷贝；**不是** git 管的 dist/ |
 | 后端 | `backend/` | FastAPI，systemd 服务 `schedule-manager`，监听 127.0.0.1:8080 |
+| 沙盒数据库 | MySQL `schedule_manager_dev` | 从生产备份克隆，**开发测试只准连它** |
 | nginx | `/etc/nginx/` | ruiyu.work 443/80 → 静态 + `/api` 反代 8080 |
-| 运行配置 | `.env`（gitignored） | 服务实际读取的配置；`.env.production` 仅是历史模板，已从仓库清除 |
+| 运行配置 | `.env`（gitignored） | 主目录 .env=生产库；worktree .env=沙盒库（两者独立，勿混） |
 | 备份 | `database_backups/`（gitignored） | 只保留最新一份（库 56K + uploads 121M） |
 
-分支约定：`main` = 线上运行版本；`dev` = 日常开发；`server-snapshot` = 历史本地快照（**仅本地，永不推送**）。
+分支约定：`main` = 线上运行版本（主目录）；`dev` = 日常开发（worktree）；`server-snapshot` = 历史本地快照（**仅本地，永不推送**）。
 
 ## 常用命令
 
@@ -58,20 +63,28 @@ journalctl -u schedule-manager -n 50 --no-pager   # 后端日志
 # 健康检查
 curl https://ruiyu.work/api/v1/health
 
-# 后端本地调试（只绑 127.0.0.1，用完 kill；公网调试走 SSH 隧道）
-cd backend && python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+# 后端测试实例（在 worktree 里跑，只连沙盒库 schedule_manager_dev，用完 kill）
+cd /root/schedule-manager-dev/backend
+python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+
+# 前端开发服务器（worktree 里，vite 代理已指向 8000）
+cd /root/schedule-manager-dev/frontend && npm run dev   # http://localhost:5173
 
 # 数据库只读排查（凭据在 .env 的 DATABASE_URL）
 mysql -u schedule -p schedule_manager -e "SELECT ..."
 ```
 
-## 标准开发流程
+## 标准开发流程（worktree 模式）
 
 ```
-git switch dev → 改代码 → 涉及后端则先 bash backup.sh 自测
-→ git add -A && git commit && git push origin dev
-→ 确认后：git switch main && git merge dev && git push origin main
-→ bash update.sh 部署并自动验证
+1. 在 /root/schedule-manager-dev（dev 分支）里改代码
+2. 测试：worktree 里起 uvicorn 8000（连沙盒库）+ npm run dev，浏览器验证
+3. git add -A && git commit -m "说明" && git push origin dev
+4. 敲定后合并部署（回到主目录）：
+   cd /root/schedule-manager
+   git merge dev && git push origin main
+   bash update.sh        # 自动：备份→拉代码→构建→发布→重启→健康检查
+5. worktree 同步下一轮：cd /root/schedule-manager-dev && git merge main
 ```
 
 ## 数据库变更流程（最高危场景）

@@ -83,15 +83,9 @@ export default function CaseReviewCasePage() {
     return allNotes.map(note => ({ ...note, byReviewer: ids.has(note.author?.id) }))
   }, [allNotes, reviewerRoleIds, assignedReviewerId])
 
-  useMobileNav({
-    title: reviewCase ? `病历 ${reviewCase.code}` : '病历',
-    rights: [
-      { label: `批注 ${allNotes.length}`, onClick: () => setSheet('notes') },
-      ...(reviewCase?.can_edit ? [{ label: '编辑', onClick: () => setEditingCase(true) }] : []),
-    ],
-  })
+  useMobileNav({ title: reviewCase ? `病历 ${reviewCase.code}` : '病历', rightLabel: reviewCase?.can_edit ? '编辑' : null, onRight: () => setEditingCase(true) })
 
-  const openFile = id => setSearchParams({ file: String(id) }, { replace: !isMobile })
+  const openFile = id => { setSearchParams({ file: String(id) }, { replace: !isMobile }); setSheet(null) }
   const closeViewer = () => {
     if (window.history.state?.idx > 0) navigate(-1)
     else setSearchParams({}, { replace: true })
@@ -173,7 +167,7 @@ export default function CaseReviewCasePage() {
     <button type="button" className={mode === 'point' ? 'is-active' : ''} aria-pressed={mode === 'point'} onClick={() => toggleMode('point')}>点注</button>
     <button type="button" className={mode === 'rect' ? 'is-active' : ''} aria-pressed={mode === 'rect'} onClick={() => toggleMode('rect')}>框选</button>
   </div>
-  const toolbarExtra = isMobile ? <>{modeButtons}<div className="cr-toolbar-group"><button type="button" onClick={() => setSheet('notes')}>批注 {notes.length}</button><button type="button" onClick={() => setSheet('conclusion')}>结论</button></div></> : modeButtons
+  const toolbarExtra = isMobile ? <>{modeButtons}<div className="cr-toolbar-group"><button type="button" onClick={() => { setNoteScope('file'); setSheet('notes') }}>批注 {notes.length}</button><button type="button" onClick={() => setSheet('conclusion')}>结论</button></div></> : modeButtons
   const viewerProps = { fileId: activeFileId, notes: markedNotes, mode, selectedId, focusRequest, draft, onSelect: setSelectedId, onDraft: setDraft, toolbarExtra }
   const viewer = activeFile && (previewType === 'pdf'
     ? <PdfViewer key={activeFile.id} {...viewerProps} />
@@ -225,13 +219,17 @@ export default function CaseReviewCasePage() {
   </>
 
   if (isMobile) return <div className="cr-case-page cr-case-mobile">
-    <h3 className="cr-section-title">病历信息</h3>
+    <div className="cr-section-head">
+      <h3 className="cr-section-title">病历信息</h3>
+      <div className="cr-note-scope">
+        <button type="button" onClick={() => { setNoteScope('all'); setSheet('notes') }}>批注 {allNotes.length}</button>
+        <button type="button" onClick={() => setSheet('files')}>文件 {files.length}</button>
+      </div>
+    </div>
     <section className="cr-panel">{info}</section>
     <h3 className="cr-section-title">审阅结论</h3>
     <section className="cr-panel">{conclusion}</section>
-    <div className="cr-section-head"><h3 className="cr-section-title">病历文件</h3>{uploadButton}</div>
     {reviewCase.can_upload && <p className="cr-muted">{CASE_FILE_HINT}</p>}
-    <section className="cr-panel">{fileList}</section>
     {reviewCase.can_edit && <button type="button" className="cr-delete-case" onClick={() => setConfirm({ type: 'case' })}>删除病历</button>}
     {activeFile && <div className="cr-viewer-full">
       <div className="cr-viewer-top"><button type="button" onClick={closeViewer}>关闭</button><span>{activeFile.name}</span><span className="cr-viewer-top-spacer" /></div>
@@ -248,8 +246,10 @@ export default function CaseReviewCasePage() {
       ...(canDeleteFile(fileMenu) ? [{ label: '删除', danger: true, onClick: () => setConfirm({ type: 'file', file: fileMenu }) }] : []),
     ]} />}
     {sheet && <div className="modal-overlay"><div className="modal cr-modal">
-      <div className="modal-header"><h3>{sheet === 'notes' ? `批注（${noteScope === 'all' ? markedAllNotes.length : notes.length}）` : '审阅结论'}</h3><button type="button" className="text-button" onClick={() => setSheet(null)}>完成</button></div>
-      {sheet === 'notes' ? <>{noteScopeToggle}{noteList}</> : conclusion}
+      <div className="modal-header"><h3>{sheet === 'notes' ? `批注（${noteScope === 'all' ? markedAllNotes.length : notes.length}）` : sheet === 'files' ? `病历文件（${files.length}）` : '审阅结论'}</h3><button type="button" className="text-button" onClick={() => setSheet(null)}>完成</button></div>
+      {sheet === 'notes' && <>{noteScopeToggle}{noteList}</>}
+      {sheet === 'files' && <>{uploadButton}{fileList}</>}
+      {sheet === 'conclusion' && conclusion}
     </div></div>}
     {dialogs}
   </div>

@@ -221,7 +221,7 @@ export default function CaseReviewCasePage() {
   if (isMobile) return <div className="cr-case-page cr-case-mobile">
     <div className="cr-section-head">
       <h3 className="cr-section-title">病历信息</h3>
-      <div className="cr-note-scope">
+      <div className="cr-quick-actions">
         <button type="button" onClick={() => { setNoteScope('all'); setSheet('notes') }}>批注 {allNotes.length}</button>
         <button type="button" onClick={() => setSheet('files')}>文件 {files.length}</button>
       </div>

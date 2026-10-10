@@ -250,3 +250,8 @@
 .cr-note-scope button { border: 1px solid #d1d5db; background: white; border-radius: 6px; padding: .1rem .5rem; font-size: .8rem; color: #6b7280; cursor: pointer; }
 .cr-note-scope button.is-active { background: #4f46e5; border-color: #4f46e5; color: white; }
 .cr-note-file { color: #6b7280; }
+
+/* 病历信息标题行的快捷入口（批注/文件）：主色填充，比普通小按钮更醒目 */
+.cr-quick-actions { display: flex; gap: .3rem; }
+.cr-quick-actions button { border: none; background: #4f46e5; color: white; border-radius: 999px; padding: .28rem .75rem; font-size: .82rem; cursor: pointer; }
+.cr-quick-actions button:active { background: #4338ca; }

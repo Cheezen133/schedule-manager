@@ -534,7 +534,8 @@ def list_cases(project_id: int, status: str | None = None, q: str | None = None,
     keyword = (q or "").strip()
     if keyword:
         query = query.filter(ReviewCase.code.contains(keyword) | ReviewCase.title.contains(keyword))
-    cases = sorted(query.all(), key=lambda item: natural_key(item.code))
+    # 按创建时间倒序（最新在前），同一时间的按 id 倒序保证稳定
+    cases = sorted(query.all(), key=lambda item: (item.created_at, item.id), reverse=True)
     file_counts, note_counts, latest = case_rows(cases, db)
     users = user_map([item.reviewer_id for item in cases] + [item.created_by for item in cases] + [c.reviewer_id for c in latest.values()], db)
     rows = [case_dict(item, users, file_counts, note_counts, latest) for item in cases]

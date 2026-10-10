@@ -8,6 +8,7 @@ import ProjectMembers from '../components/caseReview/ProjectMembers'
 import { CaseFormModal, ProjectFormModal } from '../components/caseReview/Forms'
 import { nextCaseCode } from '../components/caseReview/caseCodes'
 import { STATUS_OPTIONS, StatusPill, errorText } from '../components/caseReview/common'
+import { formatBeijingDateTime } from '../utils/dateTime'
 import { ConfirmDialog, notify } from '../components/common/Ui'
 import { BackButton } from '../components/memo/MemoNav'
 import MobileActionSheet from '../components/mobile/MobileActionSheet'
@@ -107,7 +108,7 @@ export default function CaseReviewProjectPage() {
         {visibleCases.map(item => <Link key={item.id} to={`/case-review/${projectId}/cases/${item.id}`} className="cr-case-row">
           <div className="cr-case-main">
             <div className="cr-case-title"><strong>{item.code}</strong>{item.title && <span>{item.title}</span>}</div>
-            <div className="cr-case-meta">审阅人：{item.reviewer?.nickname || '未指派'} · 文件 {item.file_count} · 批注 {item.annotation_count}</div>
+            <div className="cr-case-meta">审阅人：{item.reviewer?.nickname || '未指派'} · 文件 {item.file_count} · 批注 {item.annotation_count} · 创建 {formatBeijingDateTime(item.created_at)}</div>
             {item.conclusion?.diagnosis && <div className="cr-case-diagnosis">病因诊断：{item.conclusion.diagnosis}</div>}
           </div>
           <StatusPill status={item.status} label={item.status_label} />

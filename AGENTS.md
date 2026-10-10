@@ -26,7 +26,7 @@
 | `git add -f` 强制添加被忽略路径 | 会把患者数据推上公开 GitHub |
 | 拷贝前端到 /var/www 时使用 `--delete`（rsync）| `pdfjs/` 等资源不在构建产物里，会被误删 |
 | 直接杀 8080 端口的 uvicorn / 改动 systemd 单元 | 那是线上服务，只能 `systemctl restart schedule-manager` |
-| 从旧 Mac 克隆 push | 该克隆含已清除的旧历史（患者文件+密钥），push 会让清除白做 |
+| 从旧克隆（Mac / Windows 历史目录）push | 旧目录含已清除的患者文件与密钥，push 会让清除白做；一律全新克隆 |
 | 在 worktree 里连生产库 `schedule_manager` | worktree 的 .env 已指向沙盒库 `schedule_manager_dev`，勿改回；测试写入必须只进沙盒 |
 | 在主目录 `/root/schedule-manager` 直接改代码测试 | 主目录锁定 main 供线上运行；改动一律在 worktree `/root/schedule-manager-dev` |
 
@@ -87,24 +87,24 @@ mysql -u schedule -p schedule_manager -e "SELECT ..."
 5. worktree 同步下一轮：cd /root/schedule-manager-dev && git merge main
 ```
 
-## 三端协作规范（Mac 端）
+## 开发端协作规范（Mac / Windows）
 
-> 协作架构：**GitHub 是唯一中转站**。Mac 与生产服务器从不直接通信，
+> 协作架构：**GitHub 是唯一中转站**。开发端（Mac / Windows）与生产服务器从不直接通信，
 > 一切代码经由 GitHub 的分支同步；上线口子只有一个——服务器上的 `update.sh`。
 
 ### 铁律
 
-1. **只用全新克隆的仓库工作**。历史旧目录包含已被清除的患者文件与密钥，
-   从旧目录 push 会让全站的隐私清除工作作废。如仍保留旧目录，仅作只读参考，永不 push。
-2. **只在 `dev` 分支开发**。`main` 仅由服务器端合并部署，Mac 不碰、不推 `main`。
-3. **开工先拉**：`git pull origin dev`，避免与服务器端改动冲突。
-4. **Mac 端不做任何部署动作**，不碰生产服务器、数据库、域名。
+1. **只用全新克隆的仓库工作**。历史旧目录（无论 Mac 还是 Windows）可能包含已被清除的
+   患者文件与密钥，从旧目录 push 会让全站的隐私清除工作作废。旧目录仅作只读参考，永不 push。
+2. **只在 `dev` 分支开发**。`main` 仅由服务器端合并部署，开发端不碰、不推 `main`。
+3. **开工先拉**：`git pull origin dev`，避免与其他端改动冲突。
+4. **开发端不做任何部署动作**，不碰生产服务器、数据库、域名。
 
-### 日常循环
+### 日常循环（各端相同）
 
 ```bash
 git pull origin dev          # 1. 开工前同步
-# ...改代码...               # 2. 修改（本克隆不含任何真实用户数据，可放心折腾）
+# ...改代码...               # 2. 修改（克隆不含任何真实用户数据，可放心折腾）
 git add -A
 git commit -m "改动说明"
 git push origin dev          # 3. 推回 GitHub，服务器端会自行拉取合并
@@ -112,8 +112,7 @@ git push origin dev          # 3. 推回 GitHub，服务器端会自行拉取合
 
 ### 本地运行（可选）
 
-克隆中不含 `.env`（被 .gitignore 排除）。想在 Mac 本地跑后端时，
-自建 `backend/.env` 或项目根 `.env`，指向本地 SQLite / 本地 MySQL 即可，示例：
+克隆中不含 `.env`（被 .gitignore 排除）。本地跑后端前先自建 `.env`（项目根目录）：
 
 ```
 DATABASE_URL=sqlite:///./schedule_manager.db
@@ -123,10 +122,21 @@ DEV_MODE=true
 
 与服务器环境完全隔离，互不影响。
 
+**Windows**：创建好 `.env` 后，双击仓库根目录的 `start.bat` 一键启动
+（自动装依赖 → 起 backend:8000 + frontend:5173 两个窗口）。
+首次使用前建议设置换行符，避免 CRLF 污染 diff：
+
+```bat
+git config --global core.autocrlf true
+```
+
+**Mac**：`python3 -m uvicorn app.main:app --port 8000`（backend 目录）+ `npm run dev`（frontend 目录），
+或自写启动脚本；`.env` 也可指向本地 MySQL。
+
 ### 上线流程（仅服务器执行，此处仅备查）
 
 服务器端：`git merge dev → bash update.sh`（自动备份→构建→发布→重启→健康检查）。
-Mac 端的改动在服务器合并部署后，经 `git pull` 回流到 Mac，形成闭环。
+开发端的改动在服务器合并部署后，各端经 `git pull` 回流，形成闭环。
 
 ## 数据库变更流程（最高危场景）
 

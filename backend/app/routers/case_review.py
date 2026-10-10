@@ -82,10 +82,10 @@ class AnnotationIn(BaseModel):
     y: float
     width: float = 0
     height: float = 0
-    content: str
+    content: str = ""
 
 class AnnotationUpdate(BaseModel):
-    content: str
+    content: str = ""
 
 class ConclusionIn(BaseModel):
     decision: str
@@ -670,12 +670,10 @@ def create_annotation(file_id: int, data: AnnotationIn, db: Session = Depends(ge
     item, _, project = visible_case_file(file_id, current_user, db)
     perms = require(project, current_user, db, "annotate", "你没有批注权限")
     check_annotatable(item, data.page)
-    content = clean_text(data.content, 2000)
-    if not content:
-        raise HTTPException(400, "请填写批注内容")
+    content = clean_text(data.content, 2000)  # 批注可以只留位置标记，文字允许为空
     width, height = check_geometry(data.page, data.kind, data.x, data.y, data.width, data.height)
     note = ReviewAnnotation(file_id=item.id, page=data.page, kind=data.kind, x=data.x, y=data.y, width=width, height=height,
-                            content=content, author_id=current_user.id)
+                            content=content or "", author_id=current_user.id)
     db.add(note); db.commit(); db.refresh(note)
     return {"code": 0, "data": annotation_dict(note, user_map([current_user.id], db), current_user, "manage" in perms)}
 
@@ -717,9 +715,7 @@ def own_annotation(annotation_id, user, db):
 @router.put("/annotations/{annotation_id}")
 def update_annotation(annotation_id: int, data: AnnotationUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     note = own_annotation(annotation_id, current_user, db)
-    content = clean_text(data.content, 2000)
-    if not content and not note.audio_path:
-        raise HTTPException(400, "请填写批注内容")
+    content = clean_text(data.content, 2000)  # 文字允许清空（与创建一致，仅留标记）
     note.content = content or ""; db.commit()
     return {"code": 0}
 

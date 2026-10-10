@@ -188,7 +188,7 @@ export default function CaseReviewCasePage() {
   </ul>
   const dialogs = <>
     {draft && <AnnotationEditor draft={draft} onCancel={() => setDraft(null)} onSave={saveDraft} />}
-    {editingNote && <AnnotationEditor initialContent={editingNote.content} allowEmpty={editingNote.has_audio} onCancel={() => setEditingNote(null)} onSave={saveEditedNote} />}
+    {editingNote && <AnnotationEditor initialContent={editingNote.content} onCancel={() => setEditingNote(null)} onSave={saveEditedNote} />}
     {editingCase && <CaseFormModal projectId={Number(projectId)} members={members} reviewCase={reviewCase} onClose={() => setEditingCase(false)} onSaved={() => { setEditingCase(false); loadCase() }} />}
     <ConfirmDialog open={Boolean(confirm)} danger confirmText="删除" onConfirm={runConfirm} onCancel={() => setConfirm(null)}
       title={confirm?.type === 'case' ? '删除病历' : confirm?.type === 'file' ? '删除文件' : '删除批注'}
@@ -209,7 +209,7 @@ export default function CaseReviewCasePage() {
       {viewer}
       {selectedNote && <div className="cr-note-card">
         <div className="cr-note-meta">第 {selectedNote.page} 页 · {selectedNote.author?.nickname}{selectedNote.byReviewer && <> <span className="cr-tag is-reviewer">审阅人</span></>}</div>
-        {selectedNote.content && <p>{selectedNote.content}</p>}
+        {selectedNote.content ? <p>{selectedNote.content}</p> : <p>（仅标记）</p>}
         {selectedNote.has_audio && <VoicePlayer key={selectedNote.id} annotationId={selectedNote.id} duration={selectedNote.audio_duration} />}
         <div className="cr-note-card-actions">{selectedNote.can_edit && <><button type="button" className="text-button" onClick={() => setEditingNote(selectedNote)}>修改</button><button type="button" className="text-button cr-danger" onClick={() => setConfirm({ type: 'note', note: selectedNote })}>删除</button></>}<button type="button" className="text-button" onClick={() => setSelectedId(null)}>收起</button></div>
       </div>}

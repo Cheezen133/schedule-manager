@@ -86,8 +86,8 @@ export function CaseFormModal({ projectId, members, reviewCase, defaultCode = ''
   </div>
 }
 
-// 写批注：draft 是在文件上点出或框出的位置。新批注可以附一段录音；allowEmpty 用于修改语音批注（文字可删空）
-export function AnnotationEditor({ draft, initialContent = '', allowEmpty = false, onCancel, onSave }) {
+// 写批注：draft 是在文件上点出或框出的位置。文字可留空（只保存位置标记）；新批注可以附一段录音
+export function AnnotationEditor({ draft, initialContent = '', onCancel, onSave }) {
   const [content, setContent] = useState(initialContent)
   const [voice, setVoice] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -102,12 +102,12 @@ export function AnnotationEditor({ draft, initialContent = '', allowEmpty = fals
       setSaving(false)
     }
   }
-  const canSave = Boolean(content.trim() || voice || allowEmpty)
+  const canSave = true // 批注允许无文字无语音，仅保存位置标记
   return <div className="modal-overlay">
     <form className="modal cr-modal" onSubmit={submit}>
       <div className="modal-header"><h3>{draft ? `第 ${draft.page} 页 · ${draft.kind === 'rect' ? '框选批注' : '点注'}` : '修改批注'}</h3><button type="button" className="text-button" onClick={onCancel}>取消</button></div>
       {error && <div className="error-message">{error}</div>}
-      <textarea className="cr-note-input" autoFocus rows={4} maxLength={2000} value={content} onChange={event => setContent(event.target.value)} placeholder={draft ? '写下对这里的意见，也可以只录一段语音' : '写下对这里的意见'} />
+      <textarea className="cr-note-input" autoFocus rows={4} maxLength={2000} value={content} onChange={event => setContent(event.target.value)} placeholder={draft ? '写下对这里的意见；也可以不写，只留位置标记，或只录一段语音' : '写下对这里的意见；留空则仅保留标记'} />
       <div className="cr-voice-tools"><DictationButton onText={text => setContent(previous => previous ? `${previous}${text}` : text)} /></div>
       {draft && <VoiceRecorder value={voice} onChange={setVoice} />}
       <div className="modal-actions"><button type="button" className="btn-secondary" onClick={onCancel}>取消</button><button className="btn-primary" disabled={saving || !canSave}>{saving ? '保存中…' : '保存批注'}</button></div>

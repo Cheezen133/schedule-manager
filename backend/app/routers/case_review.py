@@ -8,6 +8,7 @@ from datetime import date, datetime, timezone
 from urllib.parse import quote
 
 import asyncio
+import re
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, Response
@@ -728,6 +729,22 @@ def available_memory_mb():
         return 9999
     return 9999
 
+# OCR 结果提炼：只保留「项目名/标题」行和带日期时间的行（医院名、患者信息等略去）；
+# 一条都没匹配上时原样返回全部文字，避免过度过滤丢内容
+_OCR_TIME_RE = re.compile(r'\d{4}\s*[-/年.]\s*\d{1,2}\s*[-/月.]\s*\d{1,2}\s*日?|\d{1,2}\s*[:：]\s*\d{2}')
+_OCR_TITLE_HINTS = ('报告', '检验', '检查', '化验', '记录', '申请单', '项目', '医嘱')
+
+def ocr_digest(lines):
+    kept = []
+    for text in lines:
+        if _OCR_TIME_RE.search(text):
+            # OCR 常把紧挨着的日期和时间粘连（如 2026-10-0908:32），补回空格
+            text = re.sub(r'(\d{4}-\d{1,2}-\d{1,2})(\d{1,2}:\d{2})', r'\1 \2', text)
+            kept.append(text)
+        elif any(word in text for word in _OCR_TITLE_HINTS):
+            kept.append(text)
+    return kept
+
 @router.post("/files/{file_id}/ocr")
 async def ocr_region(file_id: int, image: UploadFile = File(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """框选区域文字识别：前端裁好的选区截图 → 文字行；结果只回给请求者，不落库不存盘。
@@ -747,7 +764,8 @@ async def ocr_region(file_id: int, image: UploadFile = File(...), db: Session = 
     async with _ocr_lock:
         result, _ = await run_in_threadpool(lambda: ocr_engine()(array))
     lines = [item[1] for item in (result or []) if item and len(item) >= 2]
-    return {"code": 0, "data": {"text": "\n".join(lines)}}
+    digest = ocr_digest(lines)
+    return {"code": 0, "data": {"text": "\n".join(digest or lines), "all_text": "\n".join(lines)}}
 
 @router.post("/files/{file_id}/annotations/voice")
 async def create_voice_annotation(file_id: int, page: int = Form(...), kind: str = Form("point"), x: float = Form(...), y: float = Form(...),

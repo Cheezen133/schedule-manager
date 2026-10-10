@@ -229,7 +229,9 @@ export default function CaseReviewCasePage() {
     <section className="cr-panel">{info}</section>
     <h3 className="cr-section-title">审阅结论</h3>
     <section className="cr-panel">{conclusion}</section>
+    <div className="cr-section-head"><h3 className="cr-section-title">病历文件</h3>{uploadButton}</div>
     {reviewCase.can_upload && <p className="cr-muted">{CASE_FILE_HINT}</p>}
+    <section className="cr-panel">{fileList}</section>
     {reviewCase.can_edit && <button type="button" className="cr-delete-case" onClick={() => setConfirm({ type: 'case' })}>删除病历</button>}
     {activeFile && <div className="cr-viewer-full">
       <div className="cr-viewer-top"><button type="button" onClick={closeViewer}>关闭</button><span>{activeFile.name}</span><span className="cr-viewer-top-spacer" /></div>

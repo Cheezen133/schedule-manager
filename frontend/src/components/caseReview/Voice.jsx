@@ -12,8 +12,8 @@ const formatSeconds = seconds => `${Math.floor(seconds / 60)}:${String(seconds %
 // 浏览器能录音的前提：https（或本机）加上 MediaRecorder
 export const canRecord = () => Boolean(window.isSecureContext && navigator.mediaDevices?.getUserMedia && window.MediaRecorder)
 
-// 语音转文字：用浏览器自带的语音识别，识别结果交给 onText。浏览器不支持时不显示
-export function DictationButton({ onText }) {
+// 语音转文字：用浏览器自带的语音识别，识别结果交给 onText。浏览器不支持时不显示；label 自定义按钮文案
+export function DictationButton({ onText, label = '语音转文字' }) {
   const [listening, setListening] = useState(false)
   const recognitionRef = useRef(null)
   useEffect(() => () => recognitionRef.current?.abort(), [])
@@ -38,7 +38,7 @@ export function DictationButton({ onText }) {
     setListening(true)
   }
   return <button type="button" className={`cr-voice-button${listening ? ' is-active' : ''}`} onClick={listening ? () => recognitionRef.current?.stop() : start}>
-    {listening ? '正在听，点击结束' : '语音转文字'}
+    {listening ? '正在听，点击结束' : label}
   </button>
 }
 
@@ -98,8 +98,8 @@ export function VoiceRecorder({ value, onChange }) {
   return <div className="cr-recorder"><button type="button" className="cr-voice-button" onClick={start}>● 录一段语音</button><span className="cr-muted">最长 5 分钟</span></div>
 }
 
-// 播放已保存的语音批注：点了才下载，避免打开页面就加载所有语音
-export function VoicePlayer({ annotationId, duration }) {
+// 播放已保存的语音批注：点了才下载，避免打开页面就加载所有语音；audioUrl 可指定其他语音地址（如结论语音）
+export function VoicePlayer({ annotationId, audioUrl, duration }) {
   const [src, setSrc] = useState('')
   const [loading, setLoading] = useState(false)
   const audioRef = useRef(null)
@@ -108,7 +108,7 @@ export function VoicePlayer({ annotationId, duration }) {
     event.stopPropagation()
     setLoading(true)
     try {
-      const blob = await getAuthorizedFileBlob(annotationAudioUrl(annotationId), { timeout: 0 })
+      const blob = await getAuthorizedFileBlob(audioUrl || annotationAudioUrl(annotationId), { timeout: 0 })
       setSrc(URL.createObjectURL(blob))
       requestAnimationFrame(() => audioRef.current?.play().catch(() => {}))
     } catch {

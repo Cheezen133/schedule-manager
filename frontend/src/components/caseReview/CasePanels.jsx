@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
-import { saveReviewConclusion } from '../../api/caseReview'
+import { conclusionAudioUrl, deleteConclusionAudio, saveReviewConclusion, uploadConclusionAudio } from '../../api/caseReview'
 import { formatBeijingDateTime } from '../../utils/dateTime'
 import { DECISION_OPTIONS, errorText } from './common'
-import { VoicePlayer } from './Voice'
+import { DictationButton, VoicePlayer, VoiceRecorder } from './Voice'
 
 function ConclusionView({ conclusion, label = '结论' }) {
   return <div className="cr-conclusion-view">
     <div className="cr-conclusion-line"><span>{label}</span><strong className={`cr-decision cr-decision-${conclusion.decision}`}>{conclusion.decision_label}</strong></div>
     {conclusion.diagnosis && <div className="cr-conclusion-line"><span>病因诊断</span><p>{conclusion.diagnosis}</p></div>}
     {conclusion.comment && <div className="cr-conclusion-line"><span>审阅意见</span><p>{conclusion.comment}</p></div>}
+    {conclusion.has_audio && <div className="cr-conclusion-line"><span>结论语音</span><VoicePlayer audioUrl={conclusionAudioUrl(conclusion.id)} duration={conclusion.audio_duration} /></div>}
     <small>{conclusion.reviewer?.nickname} · {formatBeijingDateTime(conclusion.updated_at)}</small>
   </div>
 }
@@ -19,6 +20,8 @@ export function ConclusionPanel({ reviewCase, currentUserId, onSaved }) {
   const [decision, setDecision] = useState(mine?.decision || '')
   const [diagnosis, setDiagnosis] = useState(mine?.diagnosis || '')
   const [comment, setComment] = useState(mine?.comment || '')
+  const [voice, setVoice] = useState(null) // 新录的结论语音 { blob, url, duration, filename }
+  const [removeExisting, setRemoveExisting] = useState(false) // 删掉已保存录音的待执行标记
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
@@ -36,6 +39,9 @@ export function ConclusionPanel({ reviewCase, currentUserId, onSaved }) {
     setSaving(true); setError(''); setSaved(false)
     try {
       await saveReviewConclusion(reviewCase.id, { decision, diagnosis: diagnosis.trim() || null, comment: comment.trim() || null })
+      if (voice) await uploadConclusionAudio(reviewCase.id, voice.blob, voice.filename, voice.duration)
+      else if (removeExisting && mine?.has_audio) await deleteConclusionAudio(reviewCase.id)
+      setVoice(null); setRemoveExisting(false)
       setSaved(true)
       onSaved()
     } catch (err) {
@@ -51,7 +57,17 @@ export function ConclusionPanel({ reviewCase, currentUserId, onSaved }) {
       {DECISION_OPTIONS.map(([value, label]) => <button type="button" key={value} role="radio" aria-checked={decision === value} className={decision === value ? `is-active cr-decision-${value}` : ''} onClick={() => setDecision(value)}>{label}</button>)}
     </div></div>
     <label className="cr-field"><span>病因诊断</span><textarea rows={2} maxLength={2000} value={diagnosis} onChange={event => setDiagnosis(event.target.value)} placeholder="最终病因诊断" /></label>
+    <div className="cr-voice-tools"><DictationButton label="语音输入诊断" onText={text => setDiagnosis(previous => previous ? previous + text : text)} /></div>
     <label className="cr-field"><span>审阅意见</span><textarea rows={3} maxLength={5000} value={comment} onChange={event => setComment(event.target.value)} placeholder="不纳入或待定的原因、需要补充的材料等" /></label>
+    <div className="cr-voice-tools"><DictationButton label="语音输入意见" onText={text => setComment(previous => previous ? previous + text : text)} /></div>
+    <div className="cr-field"><span>结论语音（可选）</span>
+      {mine?.has_audio && !voice && !removeExisting && <div className="cr-recorder">
+        <VoicePlayer audioUrl={conclusionAudioUrl(mine.id)} duration={mine.audio_duration} />
+        <button type="button" className="text-button cr-danger" onClick={() => setRemoveExisting(true)}>删除录音</button>
+      </div>}
+      {removeExisting && !voice && <p className="cr-muted">原录音将在保存后删除。<button type="button" className="text-button" onClick={() => setRemoveExisting(false)}>恢复保留</button></p>}
+      <VoiceRecorder value={voice} onChange={value => { setVoice(value); setRemoveExisting(false) }} />
+    </div>
     <div className="cr-conclusion-actions">
       {mine && <small>上次保存 {formatBeijingDateTime(mine.updated_at)}</small>}
       {saved && <small className="cr-saved">已保存</small>}

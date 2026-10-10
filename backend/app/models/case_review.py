@@ -90,6 +90,10 @@ class ReviewConclusion(Base):
     decision = Column(String(10), nullable=False)
     diagnosis = Column(Text, nullable=True)
     comment = Column(Text, nullable=True)
+    audio_name = Column(String(255), nullable=True)
+    audio_path = Column(String(500), nullable=True)
+    audio_type = Column(String(100), nullable=True)
+    audio_duration = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 

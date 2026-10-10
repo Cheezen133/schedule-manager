@@ -307,7 +307,8 @@ def case_status(item, conclusion):
 def conclusion_dict(item, users):
     return {"id": item.id, "reviewer": user_brief(item.reviewer_id, users), "decision": item.decision,
             "decision_label": DECISIONS.get(item.decision, item.decision), "diagnosis": item.diagnosis,
-            "comment": item.comment, "updated_at": to_beijing_iso(item.updated_at)}
+            "comment": item.comment, "has_audio": bool(item.audio_path), "audio_duration": item.audio_duration,
+            "updated_at": to_beijing_iso(item.updated_at)}
 
 def case_rows(cases, db):
     """一次查齐列表需要的附加信息：文件数、批注数、每份病历的最新结论"""
@@ -746,6 +747,54 @@ def save_conclusion(case_id: int, data: ConclusionIn, db: Session = Depends(get_
               detail={"decision": data.decision, "diagnosis": diagnosis, "comment": comment})
     db.commit()
     return {"code": 0}
+
+
+# ----- 结论语音：录一段音频附在自己的结论上；换新删旧盘文件，改动记日志 -----
+
+def my_conclusion(case_id, user, db):
+    """定位当前用户在某份病历下的结论行；还没下过结论时提示先保存文字结论"""
+    item, project = visible_case(case_id, user, db)
+    require(project, user, db, "conclude", "你没有下结论的权限")
+    conclusion = db.query(ReviewConclusion).filter_by(case_id=item.id, reviewer_id=user.id).first()
+    if not conclusion:
+        raise HTTPException(400, "请先提交结论（选择是否纳入）后再添加语音")
+    return conclusion, project
+
+@router.put("/cases/{case_id}/conclusion/audio")
+async def replace_conclusion_audio(case_id: int, duration: int | None = Form(None), audio: UploadFile = File(...),
+                                   db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    conclusion, project = my_conclusion(case_id, current_user, db)
+    info = await save_upload(audio, "audio", kind="audio")
+    remove_file(conclusion.audio_path)  # 换新语音时删掉旧文件
+    conclusion.audio_name, conclusion.audio_path, conclusion.audio_type = info["name"], info["file_path"], info["content_type"]
+    conclusion.audio_duration = max(0, min(duration or 0, 3600)) or None
+    conclusion.updated_at = datetime.now(timezone.utc)
+    write_log(db, project.id, current_user, "save_conclusion", case_id=conclusion.case_id,
+              detail={"action": "attach_audio", "duration": conclusion.audio_duration})
+    db.commit()
+    return {"code": 0, "data": {"has_audio": True, "audio_duration": conclusion.audio_duration}}
+
+@router.delete("/cases/{case_id}/conclusion/audio")
+def delete_conclusion_audio(case_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    conclusion, project = my_conclusion(case_id, current_user, db)
+    remove_file(conclusion.audio_path)
+    conclusion.audio_name = conclusion.audio_path = conclusion.audio_type = None
+    conclusion.audio_duration = None
+    conclusion.updated_at = datetime.now(timezone.utc)
+    write_log(db, project.id, current_user, "save_conclusion", case_id=conclusion.case_id, detail={"action": "detach_audio"})
+    db.commit()
+    return {"code": 0}
+
+@router.get("/conclusions/{conclusion_id}/audio")
+def conclusion_audio(conclusion_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    conclusion = db.get(ReviewConclusion, conclusion_id)
+    if not conclusion or not conclusion.audio_path:
+        raise HTTPException(404, "语音不存在")
+    visible_case(conclusion.case_id, current_user, db)
+    if not os.path.exists(conclusion.audio_path):
+        raise HTTPException(404, "语音文件已丢失")
+    return FileResponse(conclusion.audio_path, filename=conclusion.audio_name or "voice",
+                        media_type=conclusion.audio_type or "application/octet-stream")
 
 
 # ----- 每日汇报 -----

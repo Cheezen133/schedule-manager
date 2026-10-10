@@ -23,6 +23,15 @@ export const getReviewCase = caseId => apiClient.get(`${base}/cases/${caseId}`).
 export const updateReviewCase = (caseId, values) => apiClient.put(`${base}/cases/${caseId}`, values)
 export const deleteReviewCase = caseId => apiClient.delete(`${base}/cases/${caseId}`)
 export const saveReviewConclusion = (caseId, values) => apiClient.put(`${base}/cases/${caseId}/conclusion`, values)
+// 结论语音：录好的音频附到自己的结论上（先提交过文字结论）
+export function uploadConclusionAudio(caseId, audio, filename, duration) {
+  const form = new FormData()
+  form.append('audio', audio, filename)
+  if (duration) form.append('duration', duration)
+  return apiClient.put(`${base}/cases/${caseId}/conclusion/audio`, form, NO_TIMEOUT)
+}
+export const deleteConclusionAudio = caseId => apiClient.delete(`${base}/cases/${caseId}/conclusion/audio`)
+export const conclusionAudioUrl = conclusionId => `/api/v1${base}/conclusions/${conclusionId}/audio`
 
 export function uploadCaseFiles(caseId, files, onProgress) {
   const form = new FormData()

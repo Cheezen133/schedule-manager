@@ -87,6 +87,47 @@ mysql -u schedule -p schedule_manager -e "SELECT ..."
 5. worktree 同步下一轮：cd /root/schedule-manager-dev && git merge main
 ```
 
+## 三端协作规范（Mac 端）
+
+> 协作架构：**GitHub 是唯一中转站**。Mac 与生产服务器从不直接通信，
+> 一切代码经由 GitHub 的分支同步；上线口子只有一个——服务器上的 `update.sh`。
+
+### 铁律
+
+1. **只用全新克隆的仓库工作**。历史旧目录包含已被清除的患者文件与密钥，
+   从旧目录 push 会让全站的隐私清除工作作废。如仍保留旧目录，仅作只读参考，永不 push。
+2. **只在 `dev` 分支开发**。`main` 仅由服务器端合并部署，Mac 不碰、不推 `main`。
+3. **开工先拉**：`git pull origin dev`，避免与服务器端改动冲突。
+4. **Mac 端不做任何部署动作**，不碰生产服务器、数据库、域名。
+
+### 日常循环
+
+```bash
+git pull origin dev          # 1. 开工前同步
+# ...改代码...               # 2. 修改（本克隆不含任何真实用户数据，可放心折腾）
+git add -A
+git commit -m "改动说明"
+git push origin dev          # 3. 推回 GitHub，服务器端会自行拉取合并
+```
+
+### 本地运行（可选）
+
+克隆中不含 `.env`（被 .gitignore 排除）。想在 Mac 本地跑后端时，
+自建 `backend/.env` 或项目根 `.env`，指向本地 SQLite / 本地 MySQL 即可，示例：
+
+```
+DATABASE_URL=sqlite:///./schedule_manager.db
+JWT_SECRET_KEY=本地随便一个长随机串
+DEV_MODE=true
+```
+
+与服务器环境完全隔离，互不影响。
+
+### 上线流程（仅服务器执行，此处仅备查）
+
+服务器端：`git merge dev → bash update.sh`（自动备份→构建→发布→重启→健康检查）。
+Mac 端的改动在服务器合并部署后，经 `git pull` 回流到 Mac，形成闭环。
+
 ## 数据库变更流程（最高危场景）
 
 1. `bash backup.sh`，确认 database_backups/ 出现新文件

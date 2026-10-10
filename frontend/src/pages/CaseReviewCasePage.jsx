@@ -83,7 +83,13 @@ export default function CaseReviewCasePage() {
     return allNotes.map(note => ({ ...note, byReviewer: ids.has(note.author?.id) }))
   }, [allNotes, reviewerRoleIds, assignedReviewerId])
 
-  useMobileNav({ title: reviewCase ? `病历 ${reviewCase.code}` : '病历', rightLabel: reviewCase?.can_edit ? '编辑' : null, onRight: () => setEditingCase(true) })
+  useMobileNav({
+    title: reviewCase ? `病历 ${reviewCase.code}` : '病历',
+    rights: [
+      { label: `批注 ${allNotes.length}`, onClick: () => setSheet('notes') },
+      ...(reviewCase?.can_edit ? [{ label: '编辑', onClick: () => setEditingCase(true) }] : []),
+    ],
+  })
 
   const openFile = id => setSearchParams({ file: String(id) }, { replace: !isMobile })
   const closeViewer = () => {
@@ -223,10 +229,6 @@ export default function CaseReviewCasePage() {
     <section className="cr-panel">{info}</section>
     <h3 className="cr-section-title">审阅结论</h3>
     <section className="cr-panel">{conclusion}</section>
-    {files.length > 0 && <>
-      <h3 className="cr-section-title">批注</h3>
-      <section className="cr-panel">{noteScopeToggle}{noteList}</section>
-    </>}
     <div className="cr-section-head"><h3 className="cr-section-title">病历文件</h3>{uploadButton}</div>
     {reviewCase.can_upload && <p className="cr-muted">{CASE_FILE_HINT}</p>}
     <section className="cr-panel">{fileList}</section>

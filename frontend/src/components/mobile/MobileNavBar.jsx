@@ -17,12 +17,14 @@ export function MobileNavProvider({ children }) {
 // 网页端没有 MobileNavProvider，调用不产生任何效果。
 // rightForm：右上角按钮用来提交页面里 id 为该值的表单（按钮在表单外，靠 form 属性关联）
 // addLabel：「＋」按钮的读屏文字，默认「新建日程」
-export function useMobileNav({ title, onAdd, addLabel, onToday, rightLabel, onRight, rightForm, rightDisabled = false }) {
+// rights：右上角多个文字按钮（如「批注」「编辑」），优先于单个 rightLabel/right
+export function useMobileNav({ title, onAdd, addLabel, onToday, rightLabel, onRight, rightForm, rightDisabled = false, rights }) {
   const setCustom = useContext(NavSetterContext)
   const { pathname } = useLocation()
   const actions = useRef({})
   actions.current = { onAdd, onToday, onRight }
   const hasAdd = Boolean(onAdd), hasToday = Boolean(onToday), hasRight = Boolean(onRight)
+  const rightsKey = Array.isArray(rights) ? rights.map(item => item.label).join('|') : ''
   useEffect(() => {
     if (!setCustom) return
     setCustom({
@@ -32,9 +34,11 @@ export function useMobileNav({ title, onAdd, addLabel, onToday, rightLabel, onRi
       addLabel,
       onToday: hasToday ? () => actions.current.onToday() : null,
       right: rightLabel ? { label: rightLabel, form: rightForm, disabled: rightDisabled, onClick: hasRight ? () => actions.current.onRight() : null } : null,
+      rights: (Array.isArray(rights) ? rights : []).map(item => ({ label: item.label, disabled: Boolean(item.disabled), onClick: () => item.onClick?.() })),
     })
     return () => setCustom(null)
-  }, [setCustom, pathname, title, hasAdd, addLabel, hasToday, hasRight, rightLabel, rightForm, rightDisabled])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setCustom, pathname, title, hasAdd, addLabel, hasToday, hasRight, rightLabel, rightForm, rightDisabled, rightsKey])
 }
 
 // 手机端各页面标题（按路由从上到下匹配，取第一个命中的）
@@ -120,7 +124,9 @@ export default function MobileNavBar() {
       </div>
       <div className="m-navbar-title">{title}</div>
       <div className="m-navbar-side m-navbar-actions">
-        {custom?.right && <button type={custom.right.form ? 'submit' : 'button'} form={custom.right.form || undefined} className={`m-nav-text${custom.right.form ? ' m-nav-strong' : ''}`} disabled={custom.right.disabled} onClick={custom.right.onClick || undefined}>{custom.right.label}</button>}
+        {custom?.rights?.length
+          ? custom.rights.map((item, index) => <button key={`${item.label}-${index}`} type="button" className="m-nav-text" disabled={item.disabled} onClick={item.onClick || undefined}>{item.label}</button>)
+          : custom?.right && <button type={custom.right.form ? 'submit' : 'button'} form={custom.right.form || undefined} className={`m-nav-text${custom.right.form ? ' m-nav-strong' : ''}`} disabled={custom.right.disabled} onClick={custom.right.onClick || undefined}>{custom.right.label}</button>}
         {isTab && <button type="button" className="m-nav-icon" aria-label="搜索" onClick={() => setSearchOpen(open => !open)}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="M15.5 15.5L20 20" /></svg></button>}
         {custom?.onAdd
           ? <button type="button" className="m-nav-icon" aria-label={custom.addLabel || '新建日程'} onClick={custom.onAdd}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button>

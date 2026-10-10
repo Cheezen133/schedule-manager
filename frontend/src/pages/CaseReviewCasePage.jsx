@@ -30,7 +30,7 @@ export default function CaseReviewCasePage() {
   const [error, setError] = useState('')
   const [notes, setNotes] = useState([])
   const [allNotes, setAllNotes] = useState([]) // 整份病历的批注汇总（跨文件）
-  const [noteScope, setNoteScope] = useState('file') // 侧栏批注视图：本文件 / 全部
+  const [noteScope, setNoteScope] = useState('all') // 批注视图默认「全部」：不开 PDF 也能纵览；可切回当前文件
   const [mode, setMode] = useState('view')
   const [draft, setDraft] = useState(null)
   const [selectedId, setSelectedId] = useState(null)
@@ -63,7 +63,7 @@ export default function CaseReviewCasePage() {
 
   const loadNotes = useCallback(() => (activeFileId && canPreview ? listAnnotations(activeFileId) : Promise.resolve([])), [activeFileId, canPreview])
   const loadAllNotes = useCallback(() => listCaseAnnotations(caseId).catch(() => []), [caseId])
-  useEffect(() => { setAllNotes([]); setNoteScope('file'); loadAllNotes().then(setAllNotes) }, [loadAllNotes])
+  useEffect(() => { setAllNotes([]); setNoteScope('all'); loadAllNotes().then(setAllNotes) }, [loadAllNotes])
   useEffect(() => {
     let cancelled = false
     setNotes([]); setSelectedId(null); setDraft(null); setMode('view'); setFocusRequest(null); setEditingNote(null); setSheet(null)
@@ -223,6 +223,10 @@ export default function CaseReviewCasePage() {
     <section className="cr-panel">{info}</section>
     <h3 className="cr-section-title">审阅结论</h3>
     <section className="cr-panel">{conclusion}</section>
+    {files.length > 0 && <>
+      <h3 className="cr-section-title">批注</h3>
+      <section className="cr-panel">{noteScopeToggle}{noteList}</section>
+    </>}
     <div className="cr-section-head"><h3 className="cr-section-title">病历文件</h3>{uploadButton}</div>
     {reviewCase.can_upload && <p className="cr-muted">{CASE_FILE_HINT}</p>}
     <section className="cr-panel">{fileList}</section>

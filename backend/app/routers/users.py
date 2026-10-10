@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from ..database import get_db
 from ..dependencies import get_current_user, require_role
 from ..models.user import User
+from ..models.invite import InviteCode
 from ..models.schedule import Schedule
 from ..models.chat_message import ChatMessage
 from ..models.notification import Notification
@@ -206,3 +207,67 @@ async def delete_my_account(
     db.commit()
 
     return {"code": 0, "message": "账号已注销", "data": None}
+
+
+# ----- 注册邀请码：管理员生成发放，注册时核销 -----
+
+
+class CreateInviteCodeRequest(BaseModel):
+    max_uses: int = Field(1, ge=1, le=100, description="可用次数")
+    note: str | None = Field(None, max_length=100, description="备注")
+
+
+def _invite_to_dict(c: InviteCode) -> dict:
+    return {
+        "id": c.id,
+        "code": c.code,
+        "max_uses": c.max_uses,
+        "used_count": c.used_count,
+        "note": c.note,
+        "disabled": c.disabled,
+        "is_available": c.is_available,
+        "created_at": to_beijing_iso(c.created_at),
+    }
+
+
+@router.get("/users/invite-codes", summary="邀请码列表")
+async def list_invite_codes(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("admin")),
+):
+    codes = db.query(InviteCode).order_by(InviteCode.id.desc()).limit(100).all()
+    return {"code": 0, "message": "ok", "data": [_invite_to_dict(c) for c in codes]}
+
+
+@router.post("/users/invite-codes", summary="生成邀请码")
+async def create_invite_code(
+    body: CreateInviteCodeRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("admin")),
+):
+    import secrets
+
+    alphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"  # 去掉易混淆的 0/O/1/I
+    for _ in range(5):  # 极小概率撞码，重试几次
+        code = "".join(secrets.choice(alphabet) for _ in range(8))
+        if not db.query(InviteCode.id).filter(InviteCode.code == code).first():
+            break
+    invite = InviteCode(code=code, max_uses=body.max_uses, note=body.note, created_by=current_user.id)
+    db.add(invite)
+    db.commit()
+    db.refresh(invite)
+    return {"code": 0, "message": "已生成邀请码", "data": _invite_to_dict(invite)}
+
+
+@router.put("/users/invite-codes/{code_id}/toggle", summary="启用/停用邀请码")
+async def toggle_invite_code(
+    code_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("admin")),
+):
+    invite = db.query(InviteCode).filter(InviteCode.id == code_id).first()
+    if not invite:
+        raise HTTPException(status_code=404, detail="邀请码不存在")
+    invite.disabled = not invite.disabled
+    db.commit()
+    return {"code": 0, "message": "已停用" if invite.disabled else "已启用", "data": _invite_to_dict(invite)}

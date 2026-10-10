@@ -1,6 +1,30 @@
 import apiClient from './client'
 
 /**
+ * 邀请码列表（管理员）
+ */
+export async function listInviteCodes() {
+  const res = await apiClient.get('/users/invite-codes')
+  return res.data
+}
+
+/**
+ * 生成邀请码（管理员）
+ */
+export async function createInviteCode(maxUses = 1, note = null) {
+  const res = await apiClient.post('/users/invite-codes', { max_uses: maxUses, note })
+  return res.data
+}
+
+/**
+ * 启用/停用邀请码（管理员）
+ */
+export async function toggleInviteCode(codeId) {
+  const res = await apiClient.put(`/users/invite-codes/${codeId}/toggle`)
+  return res.data
+}
+
+/**
  * 获取用户列表（管理员）
  */
 export async function getUsers(params = {}) {

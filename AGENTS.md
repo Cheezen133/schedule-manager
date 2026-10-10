@@ -6,7 +6,7 @@
 ## 项目身份
 
 **日程管理系统**：React + Vite 前端 / FastAPI 后端 / MySQL。
-**本机就是生产服务器**，线上地址 https://ruiyu.work （nginx 443 → 前端静态 + 反代 API）。
+**本机就是生产服务器**，线上域名不写入仓库（隐私考虑），由服务器本地 nginx 配置（443 → 前端静态 + 反代 API）。
 仓库：`Cheezen133/schedule-manager`（公开），origin 已配置，gh CLI 已认证（账号 Cheezen133）。
 
 ## 🔴 红线（违反即事故，无例外）
@@ -40,7 +40,7 @@
 | 前端线上产物 | `/var/www/schedule-manager/` | 由 update.sh 从 dist 拷贝；**不是** git 管的 dist/ |
 | 后端 | `backend/` | FastAPI，systemd 服务 `schedule-manager`，监听 127.0.0.1:8080 |
 | 沙盒数据库 | MySQL `schedule_manager_dev` | 从生产备份克隆，**开发测试只准连它** |
-| nginx | `/etc/nginx/` | ruiyu.work 443/80 → 静态 + `/api` 反代 8080 |
+| nginx | `/etc/nginx/` | 线上域名 443/80 → 静态 + `/api` 反代 8080（域名见服务器本地配置，不入仓库） |
 | 运行配置 | `.env`（gitignored） | 主目录 .env=生产库；worktree .env=沙盒库（两者独立，勿混） |
 | 备份 | `database_backups/`（gitignored） | 只保留最新一份（库 56K + uploads 121M） |
 
@@ -61,7 +61,7 @@ systemctl status|restart schedule-manager
 journalctl -u schedule-manager -n 50 --no-pager   # 后端日志
 
 # 健康检查
-curl https://ruiyu.work/api/v1/health
+curl http://127.0.0.1:8080/api/v1/health
 
 # 后端测试实例（在 worktree 里跑，只连沙盒库 schedule_manager_dev，用完 kill）
 cd /root/schedule-manager-dev/backend

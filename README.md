@@ -1,6 +1,6 @@
 # 日程管理系统
 
-团队日程管理平台，线上部署于 **https://ruiyu.work**。
+团队日程管理平台（React + FastAPI + MySQL）。
 
 ## 功能特性
 

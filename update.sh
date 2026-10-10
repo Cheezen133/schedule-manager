@@ -46,8 +46,8 @@ systemctl restart schedule-manager
 sleep 3
 
 echo "==== [6/6] 健康检查 ===="
-if curl -sf -o /dev/null https://ruiyu.work/api/v1/health; then
-  echo "✅ 部署成功，线上正常  https://ruiyu.work"
+if curl -sf -o /dev/null http://127.0.0.1:8080/api/v1/health; then
+  echo "✅ 部署成功，后端服务正常（本机 8080）"
 else
   echo "❌ 健康检查失败！最近日志："
   journalctl -u schedule-manager -n 20 --no-pager || tail -30 /root/schedule-manager/backend/nohup.out

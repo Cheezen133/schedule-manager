@@ -9,6 +9,7 @@ class RegisterRequest(BaseModel):
     password: str = Field(..., min_length=8, max_length=16, description="登录密码（8-16位）")
     nickname: str = Field(..., min_length=1, max_length=50, description="显示名称")
     phone: str | None = Field(None, description="手机号（可选）")
+    invite_code: str | None = Field(None, description="注册邀请码（向管理员申请；系统首个账号初始化时无需）")
 
 
 class LoginRequest(BaseModel):

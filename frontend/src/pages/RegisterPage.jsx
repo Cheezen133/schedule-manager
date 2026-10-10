@@ -8,6 +8,7 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [nickname, setNickname] = useState('')
   const [phone, setPhone] = useState('')
+  const [inviteCode, setInviteCode] = useState('')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(false)
@@ -47,9 +48,14 @@ export default function RegisterPage() {
       return
     }
 
+    if (!inviteCode.trim()) {
+      setError('请输入邀请码（向管理员申请）')
+      return
+    }
+
     setLoading(true)
     try {
-      await register(username.trim(), password, nickname.trim(), phone.trim() || null)
+      await register(username.trim(), password, nickname.trim(), phone.trim() || null, inviteCode.trim())
       setSuccess('注册成功！')
       // 不清除账号密码，方便用户记录
     } catch (err) {
@@ -87,6 +93,19 @@ export default function RegisterPage() {
 
         <form onSubmit={handleRegister}>
           <div className="form-group">
+            <label>邀请码 <span style={{ color: '#dc2626' }}>*</span></label>
+            <input
+              type="text"
+              value={inviteCode}
+              onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+              placeholder="向管理员申请"
+              maxLength={16}
+              autoFocus
+            />
+            <p className="field-hint">本系统仅限受邀请的成员注册，邀请码请向管理员申请</p>
+          </div>
+
+          <div className="form-group">
             <label>用户名 <span style={{ color: '#dc2626' }}>*</span></label>
             <input
               type="text"
@@ -94,7 +113,6 @@ export default function RegisterPage() {
               onChange={(e) => setUsername(e.target.value)}
               placeholder="3-50位字符"
               maxLength={50}
-              autoFocus
             />
           </div>
 

@@ -10,17 +10,26 @@ from ..services.auth_service import register_user, login_user, validate_password
 from ..utils.security import decode_password_recovery_token
 from ..dependencies import get_current_user
 from ..models.user import User
+from ..models.invite import InviteCode
 
 router = APIRouter(prefix="/api/v1/auth", tags=["认证"])
 
 
 @router.post("/register", summary="用户注册")
 async def register(body: RegisterRequest, db: Session = Depends(get_db)):
-    """使用用户名和密码注册新账号"""
+    """使用用户名和密码注册新账号；除系统首个账号外，必须持管理员发放的有效邀请码"""
     # 密码强度检测
     err = validate_password_strength(body.password)
     if err:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=err)
+
+    # 邀请码校验：系统里已有用户时必须提供有效邀请码；全新部署的首个账号用于初始化，豁免
+    has_users = db.query(User.id).first() is not None
+    invite = None
+    if has_users:
+        invite = db.query(InviteCode).filter(InviteCode.code == (body.invite_code or "").strip().upper()).first()
+        if not invite or not invite.is_available:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="邀请码无效或已用完，请向管理员申请")
 
     user = register_user(db, body.username, body.password, body.nickname, body.phone)
     if user is None:
@@ -28,6 +37,10 @@ async def register(body: RegisterRequest, db: Session = Depends(get_db)):
             status_code=status.HTTP_409_CONFLICT,
             detail="用户名已被占用，请换一个",
         )
+
+    if invite:
+        invite.used_count += 1  # 注册成功后核销一次
+        db.commit()
 
     return {
         "code": 0,

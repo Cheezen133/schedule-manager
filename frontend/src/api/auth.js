@@ -1,10 +1,10 @@
 import apiClient from './client'
 
 /**
- * 用户注册
+ * 用户注册（需邀请码）
  */
-export async function register(username, password, nickname, phone) {
-  const res = await apiClient.post('/auth/register', { username, password, nickname, phone })
+export async function register(username, password, nickname, phone, inviteCode) {
+  const res = await apiClient.post('/auth/register', { username, password, nickname, phone, invite_code: inviteCode || null })
   return res.data
 }
 

@@ -85,6 +85,13 @@ def main():
         if "notifications" in tables:
             columns = {item["name"] for item in inspect(engine).get_columns("notifications")}
             add_column(connection, "notifications", columns, "related_url", "VARCHAR(300)")
+        # v2：审阅结论可附语音（新表 invite_codes 由结尾的 create_all 幂等创建）
+        if "review_conclusions" in tables:
+            columns = {item["name"] for item in inspect(engine).get_columns("review_conclusions")}
+            add_column(connection, "review_conclusions", columns, "audio_name", "VARCHAR(255)")
+            add_column(connection, "review_conclusions", columns, "audio_path", "VARCHAR(500)")
+            add_column(connection, "review_conclusions", columns, "audio_type", "VARCHAR(100)")
+            add_column(connection, "review_conclusions", columns, "audio_duration", "INTEGER")
     Base.metadata.create_all(bind=engine)
     missing = schema_differences()
     if missing:

@@ -678,6 +678,21 @@ def list_annotations(file_id: int, db: Session = Depends(get_db), current_user: 
     users = user_map([note.author_id for note in notes], db)
     return {"code": 0, "data": [annotation_dict(note, users, current_user, can_manage, member) for note in notes]}
 
+@router.get("/cases/{case_id}/annotations")
+def case_annotations(case_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """整份病历的批注汇总：跨全部文件，按文件顺序 + 页码排，每条带来源文件名，供审阅人不必逐个翻文件"""
+    item, project = visible_case(case_id, current_user, db)
+    can_manage = "manage" in permissions_of(project, current_user, db)
+    member = is_member(project, current_user, db)
+    files = db.query(ReviewCaseFile).filter_by(case_id=item.id).order_by(ReviewCaseFile.created_at, ReviewCaseFile.id).all()
+    files.sort(key=lambda f: (file_kind_rank(f.name), f.created_at, f.id))
+    names = {f.id: f.name for f in files}
+    order = {f.id: index for index, f in enumerate(files)}
+    notes = db.query(ReviewAnnotation).filter(ReviewAnnotation.file_id.in_(names)).all()
+    notes.sort(key=lambda n: (order.get(n.file_id, 9999), n.page, n.y, n.id))
+    users = user_map([note.author_id for note in notes], db)
+    return {"code": 0, "data": [{**annotation_dict(note, users, current_user, can_manage, member), "file_name": names.get(note.file_id, "")} for note in notes]}
+
 @router.post("/files/{file_id}/annotations")
 def create_annotation(file_id: int, data: AnnotationIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     item, _, project = visible_case_file(file_id, current_user, db)

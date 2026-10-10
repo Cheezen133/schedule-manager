@@ -44,6 +44,8 @@ export const caseFileUrl = fileId => `/api/v1${base}/files/${fileId}/content`
 export const fetchCaseFile = (fileId, onProgress) => apiClient.get(`${base}/files/${fileId}/content`, { ...NO_TIMEOUT, responseType: 'arraybuffer', onDownloadProgress: onProgress }).then(response => response.data)
 
 export const listAnnotations = fileId => apiClient.get(`${base}/files/${fileId}/annotations`).then(data)
+// 整份病历的批注汇总（跨全部文件，带来源文件名）
+export const listCaseAnnotations = caseId => apiClient.get(`${base}/cases/${caseId}/annotations`).then(data)
 export const createAnnotation = (fileId, values) => apiClient.post(`${base}/files/${fileId}/annotations`, values).then(data)
 // 语音批注：位置信息加录音文件一起上传，文字可以为空
 export function createVoiceAnnotation(fileId, values, audio, filename) {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { caseFileUrl, createAnnotation, createVoiceAnnotation, deleteAnnotation, deleteCaseFile, deleteReviewCase, getReviewCase, getReviewProject, listAnnotations, updateAnnotation, uploadCaseFiles } from '../api/caseReview'
+import { caseFileUrl, createAnnotation, createVoiceAnnotation, deleteAnnotation, deleteCaseFile, deleteReviewCase, getReviewCase, getReviewProject, listAnnotations, listCaseAnnotations, updateAnnotation, uploadCaseFiles } from '../api/caseReview'
 import { downloadAuthorizedFile } from '../api/files'
 import PdfViewer from '../components/caseReview/PdfViewer'
 import ImageViewer from '../components/caseReview/ImageViewer'
@@ -29,6 +29,8 @@ export default function CaseReviewCasePage() {
   const [reviewerRoleIds, setReviewerRoleIds] = useState([])
   const [error, setError] = useState('')
   const [notes, setNotes] = useState([])
+  const [allNotes, setAllNotes] = useState([]) // 整份病历的批注汇总（跨文件）
+  const [noteScope, setNoteScope] = useState('file') // 侧栏批注视图：本文件 / 全部
   const [mode, setMode] = useState('view')
   const [draft, setDraft] = useState(null)
   const [selectedId, setSelectedId] = useState(null)
@@ -60,6 +62,8 @@ export default function CaseReviewCasePage() {
   const canPreview = previewType === 'pdf' || previewType === 'image'
 
   const loadNotes = useCallback(() => (activeFileId && canPreview ? listAnnotations(activeFileId) : Promise.resolve([])), [activeFileId, canPreview])
+  const loadAllNotes = useCallback(() => listCaseAnnotations(caseId).catch(() => []), [caseId])
+  useEffect(() => { setAllNotes([]); setNoteScope('file'); loadAllNotes().then(setAllNotes) }, [loadAllNotes])
   useEffect(() => {
     let cancelled = false
     setNotes([]); setSelectedId(null); setDraft(null); setMode('view'); setFocusRequest(null); setEditingNote(null); setSheet(null)
@@ -73,6 +77,11 @@ export default function CaseReviewCasePage() {
     if (assignedReviewerId) ids.add(assignedReviewerId)
     return notes.map(note => ({ ...note, byReviewer: ids.has(note.author?.id) }))
   }, [notes, reviewerRoleIds, assignedReviewerId])
+  const markedAllNotes = useMemo(() => {
+    const ids = new Set(reviewerRoleIds)
+    if (assignedReviewerId) ids.add(assignedReviewerId)
+    return allNotes.map(note => ({ ...note, byReviewer: ids.has(note.author?.id) }))
+  }, [allNotes, reviewerRoleIds, assignedReviewerId])
 
   useMobileNav({ title: reviewCase ? `病历 ${reviewCase.code}` : '病历', rightLabel: reviewCase?.can_edit ? '编辑' : null, onRight: () => setEditingCase(true) })
 
@@ -92,6 +101,7 @@ export default function CaseReviewCasePage() {
       ? await createVoiceAnnotation(activeFileId, { ...draft, content, duration: voice.duration }, voice.blob, voice.filename)
       : await createAnnotation(activeFileId, { ...draft, content })
     loadCase()
+    loadAllNotes().then(setAllNotes)
     if (activeFileRef.current !== fileId) return
     setDraft(null); setMode('view')
     const nextNotes = await loadNotes()
@@ -139,6 +149,7 @@ export default function CaseReviewCasePage() {
           const nextNotes = await loadNotes()
           if (activeFileRef.current === target.note.file_id) setNotes(nextNotes)
         }
+        loadAllNotes().then(setAllNotes)
         loadCase()
       }
     } catch (err) {
@@ -164,7 +175,19 @@ export default function CaseReviewCasePage() {
       ? <ImageViewer key={activeFile.id} name={activeFile.name} {...viewerProps} />
       : <div className="cr-download-preview"><strong>{activeFile.name}</strong><p>此格式请下载后阅读，审阅结论可在病历中提交。</p><button type="button" className="btn-primary" onClick={() => download(activeFile)}>下载文件</button></div>)
   const conclusion = <ConclusionPanel key={`${reviewCase.id}-${reviewCase.reviewer?.id}`} reviewCase={reviewCase} currentUserId={user?.id} onSaved={loadCase} />
-  const noteList = <AnnotationList notes={markedNotes} selectedId={selectedId} onSelect={id => { setSheet(null); focusNote(id) }} onEdit={note => { setSheet(null); setEditingNote(note) }} onDelete={note => { setSheet(null); setConfirm({ type: 'note', note }) }} />
+  // 批注视图：本文件或整份病历汇总；汇总里点一条会切到来源文件并定位
+  const scopeNotes = noteScope === 'all' ? markedAllNotes : markedNotes
+  const selectNote = id => {
+    setSheet(null)
+    const note = scopeNotes.find(item => item.id === id)
+    if (note && note.file_id !== activeFileId) openFile(note.file_id)
+    focusNote(id)
+  }
+  const noteScopeToggle = <div className="cr-note-scope">
+    <button type="button" className={noteScope === 'file' ? 'is-active' : ''} onClick={() => setNoteScope('file')}>本文件 {notes.length}</button>
+    <button type="button" className={noteScope === 'all' ? 'is-active' : ''} onClick={() => setNoteScope('all')}>全部 {markedAllNotes.length}</button>
+  </div>
+  const noteList = <AnnotationList notes={scopeNotes} selectedId={selectedId} showFile={noteScope === 'all'} onSelect={selectNote} onEdit={note => { setSheet(null); setEditingNote(note) }} onDelete={note => { setSheet(null); setConfirm({ type: 'note', note }) }} />
   const uploadButton = reviewCase.can_upload && <label title={CASE_FILE_HINT} className={`btn-secondary cr-upload${uploadProgress ? ' is-busy' : ''}`}>{uploadProgress ? `上传中 ${uploadProgress}` : '上传文件'}<input type="file" accept={CASE_FILE_ACCEPT} multiple hidden disabled={Boolean(uploadProgress)} onChange={uploadFiles} /></label>
   const info = <dl className="cr-case-info">
     <div><dt>编号</dt><dd>{reviewCase.code}</dd></div>
@@ -219,8 +242,8 @@ export default function CaseReviewCasePage() {
       ...(canDeleteFile(fileMenu) ? [{ label: '删除', danger: true, onClick: () => setConfirm({ type: 'file', file: fileMenu }) }] : []),
     ]} />}
     {sheet && <div className="modal-overlay"><div className="modal cr-modal">
-      <div className="modal-header"><h3>{sheet === 'notes' ? `批注（${notes.length}）` : '审阅结论'}</h3><button type="button" className="text-button" onClick={() => setSheet(null)}>完成</button></div>
-      {sheet === 'notes' ? noteList : conclusion}
+      <div className="modal-header"><h3>{sheet === 'notes' ? `批注（${noteScope === 'all' ? markedAllNotes.length : notes.length}）` : '审阅结论'}</h3><button type="button" className="text-button" onClick={() => setSheet(null)}>完成</button></div>
+      {sheet === 'notes' ? <>{noteScopeToggle}{noteList}</> : conclusion}
     </div></div>}
     {dialogs}
   </div>
@@ -237,7 +260,7 @@ export default function CaseReviewCasePage() {
       </section>
       <aside className="cr-side">
         <section className="cr-panel"><h3>审阅结论</h3>{conclusion}</section>
-        {canPreview && <section className="cr-panel"><h3>批注 <small>{notes.length}</small></h3>{noteList}</section>}
+        {(canPreview || markedAllNotes.length > 0) && <section className="cr-panel"><div className="cr-section-head"><h3>批注</h3>{noteScopeToggle}</div>{noteList}</section>}
         <section className="cr-panel"><h3>病历信息</h3>{info}</section>
         <section className="cr-panel"><div className="cr-section-head"><h3>病历文件</h3>{uploadButton}</div>{reviewCase.can_upload && <p className="cr-muted">{CASE_FILE_HINT}</p>}{fileList}</section>
       </aside>

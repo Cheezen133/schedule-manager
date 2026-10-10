@@ -77,18 +77,18 @@ export function ConclusionPanel({ reviewCase, currentUserId, onSaved }) {
   </form>
 }
 
-// 批注列表：编号与文件上的标记一致，点一条就跳到它的位置；语音批注带播放按钮
-export function AnnotationList({ notes, selectedId, onSelect, onEdit, onDelete }) {
+// 批注列表：编号与文件上的标记一致，点一条就跳到它的位置；语音批注带播放按钮；showFile 时显示来源文件（汇总视图）
+export function AnnotationList({ notes, selectedId, onSelect, onEdit, onDelete, showFile = false }) {
   const listRef = useRef(null)
   useEffect(() => {
     if (selectedId) listRef.current?.querySelector(`[data-note="${selectedId}"]`)?.scrollIntoView({ block: 'nearest' })
   }, [selectedId])
-  if (!notes.length) return <p className="cr-muted cr-empty-notes">还没有批注。用工具栏的「点注」或「框选」在病历上标记。</p>
+  if (!notes.length) return <p className="cr-muted cr-empty-notes">{showFile ? '这份病历还没有任何批注。' : '还没有批注。用工具栏的「点注」或「框选」在病历上标记。'}</p>
   return <ol className="cr-note-list" ref={listRef}>
     {notes.map((note, index) => <li key={note.id} data-note={note.id} className={note.id === selectedId ? 'is-selected' : ''}>
       <button type="button" className="cr-note-item" onClick={() => onSelect(note.id)}>
         <span className={`cr-note-number${note.byReviewer ? ' is-reviewer' : ''}`}>{index + 1}</span>
-        <span className="cr-note-body"><span className="cr-note-meta">第 {note.page} 页 · {note.author?.nickname}{note.byReviewer && <> <span className="cr-tag is-reviewer">审阅人</span></>} · {formatBeijingDateTime(note.created_at, { includeYear: false })}</span>{note.content ? <span className="cr-note-text">{note.content}</span> : <span className="cr-note-text">（仅标记）</span>}</span>
+        <span className="cr-note-body"><span className="cr-note-meta">{showFile && note.file_name && <span className="cr-note-file">{note.file_name} · </span>}第 {note.page} 页 · {note.author?.nickname}{note.byReviewer && <> <span className="cr-tag is-reviewer">审阅人</span></>} · {formatBeijingDateTime(note.created_at, { includeYear: false })}</span>{note.content ? <span className="cr-note-text">{note.content}</span> : <span className="cr-note-text">（仅标记）</span>}</span>
       </button>
       {(note.has_audio || note.can_edit) && <div className="cr-note-footer">
         {note.has_audio && <VoicePlayer annotationId={note.id} duration={note.audio_duration} />}

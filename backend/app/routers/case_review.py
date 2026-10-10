@@ -7,7 +7,9 @@ import uuid
 from datetime import date, datetime, timezone
 from urllib.parse import quote
 
+import asyncio
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 from sqlalchemy import func, or_
@@ -704,6 +706,48 @@ def create_annotation(file_id: int, data: AnnotationIn, db: Session = Depends(ge
                             content=content or "", author_id=current_user.id)
     db.add(note); db.commit(); db.refresh(note)
     return {"code": 0, "data": annotation_dict(note, user_map([current_user.id], db), current_user, "manage" in perms)}
+
+_ocr_engine = None
+_ocr_lock = asyncio.Lock()
+
+def ocr_engine():
+    """本地离线 OCR（RapidOCR），首次调用才加载模型；单线程小输入以控制内存（本机 1.9G）"""
+    global _ocr_engine
+    if _ocr_engine is None:
+        from rapidocr_onnxruntime import RapidOCR
+        _ocr_engine = RapidOCR(intra_op_num_threads=1, inter_op_num_threads=1, det_limit_side_len=480, det_limit_type='min')
+    return _ocr_engine
+
+def available_memory_mb():
+    try:
+        with open('/proc/meminfo') as f:
+            for line in f:
+                if line.startswith('MemAvailable:'):
+                    return int(line.split()[1]) // 1024
+    except OSError:
+        return 9999
+    return 9999
+
+@router.post("/files/{file_id}/ocr")
+async def ocr_region(file_id: int, image: UploadFile = File(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """框选区域文字识别：前端裁好的选区截图 → 文字行；结果只回给请求者，不落库不存盘。
+    模型加载约需 500M 内存：低于门槛时友好拒绝而不是把服务拖垮；同时只允许一个识别在跑"""
+    item, _, project = visible_case_file(file_id, current_user, db)
+    require(project, current_user, db, "annotate", "你没有批注权限")
+    if available_memory_mb() < 350:  # 低于门槛友好拒绝；有 swap 兜底，正常不会触发
+        raise HTTPException(503, "服务器内存暂时紧张，请稍后再试一次识别")
+    import cv2
+    import numpy as np
+    data = await image.read()
+    if len(data) > 8 * 1024 * 1024:
+        raise HTTPException(400, "选区图片太大")
+    array = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
+    if array is None:
+        raise HTTPException(400, "无法解析选区图片")
+    async with _ocr_lock:
+        result, _ = await run_in_threadpool(lambda: ocr_engine()(array))
+    lines = [item[1] for item in (result or []) if item and len(item) >= 2]
+    return {"code": 0, "data": {"text": "\n".join(lines)}}
 
 @router.post("/files/{file_id}/annotations/voice")
 async def create_voice_annotation(file_id: int, page: int = Form(...), kind: str = Form("point"), x: float = Form(...), y: float = Form(...),

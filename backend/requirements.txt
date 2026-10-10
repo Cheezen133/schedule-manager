@@ -8,3 +8,4 @@ python-multipart>=0.0.9
 icalendar>=5.0.0
 slowapi>=0.1.9
 python-dotenv>=1.0.0
+rapidocr-onnxruntime

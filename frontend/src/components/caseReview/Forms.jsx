@@ -1,8 +1,9 @@
 import { CASE_FILE_ACCEPT, CASE_FILE_HINT } from './fileFormats'
 import { useRef, useState } from 'react'
-import { createReviewCase, createReviewProject, updateReviewCase, updateReviewProject, uploadCaseFiles } from '../../api/caseReview'
+import { createReviewCase, createReviewProject, ocrAnnotationRegion, updateReviewCase, updateReviewProject, uploadCaseFiles } from '../../api/caseReview'
 import { errorText, progressText } from './common'
 import { DictationButton, VoiceRecorder } from './Voice'
+import { notify } from '../common/Ui'
 
 // 新建／编辑项目。「演示项目」开关只给创建者（新建时就是自己）和系统管理员
 export function ProjectFormModal({ project, onClose, onSaved }) {
@@ -86,12 +87,26 @@ export function CaseFormModal({ projectId, members, reviewCase, defaultCode = ''
   </div>
 }
 
-// 写批注：draft 是在文件上点出或框出的位置。文字可留空（只保存位置标记）；新批注可以附一段录音
-export function AnnotationEditor({ draft, initialContent = '', onCancel, onSave }) {
+// 写批注：draft 是在文件上点出或框出的位置。文字可留空（只保存位置标记）；新批注可以附一段录音；
+// 框选时 draft.crop 带选区截图，可用「识别选区文字」离线 OCR 预填内容
+export function AnnotationEditor({ draft, initialContent = '', fileId, onCancel, onSave }) {
   const [content, setContent] = useState(initialContent)
   const [voice, setVoice] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [ocring, setOcring] = useState(false)
   const [error, setError] = useState('')
+  const runOcr = async () => {
+    setOcring(true)
+    try {
+      const result = await ocrAnnotationRegion(fileId, draft.crop)
+      if (result?.text) setContent(previous => previous ? `${previous}${previous.endsWith('\n') ? '' : '\n'}${result.text}` : result.text)
+      else notify('这个区域没有识别到文字')
+    } catch (err) {
+      notify(errorText(err, '识别失败，请重试'))
+    } finally {
+      setOcring(false)
+    }
+  }
   const submit = async event => {
     event.preventDefault()
     setSaving(true); setError('')
@@ -108,7 +123,10 @@ export function AnnotationEditor({ draft, initialContent = '', onCancel, onSave 
       <div className="modal-header"><h3>{draft ? `第 ${draft.page} 页 · ${draft.kind === 'rect' ? '框选批注' : '点注'}` : '修改批注'}</h3><button type="button" className="text-button" onClick={onCancel}>取消</button></div>
       {error && <div className="error-message">{error}</div>}
       <textarea className="cr-note-input" autoFocus rows={4} maxLength={2000} value={content} onChange={event => setContent(event.target.value)} placeholder={draft ? '写下对这里的意见；也可以不写，只留位置标记，或只录一段语音' : '写下对这里的意见；留空则仅保留标记'} />
-      <div className="cr-voice-tools"><DictationButton onText={text => setContent(previous => previous ? `${previous}${text}` : text)} /></div>
+      <div className="cr-voice-tools">
+        <DictationButton onText={text => setContent(previous => previous ? `${previous}${text}` : text)} />
+        {draft?.crop && <button type="button" className="cr-voice-button" onClick={runOcr} disabled={ocring || saving}>{ocring ? '识别中…' : '识别选区文字'}</button>}
+      </div>
       {draft && <VoiceRecorder value={voice} onChange={setVoice} />}
       <div className="modal-actions"><button type="button" className="btn-secondary" onClick={onCancel}>取消</button><button className="btn-primary" disabled={saving || !canSave}>{saving ? '保存中…' : '保存批注'}</button></div>
     </form>

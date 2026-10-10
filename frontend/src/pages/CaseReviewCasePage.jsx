@@ -210,7 +210,7 @@ export default function CaseReviewCasePage() {
     {!files.length && <li className="cr-muted">还没有上传病历文件</li>}
   </ul>
   const dialogs = <>
-    {draft && <AnnotationEditor draft={draft} onCancel={() => setDraft(null)} onSave={saveDraft} />}
+    {draft && <AnnotationEditor draft={draft} fileId={activeFileId} onCancel={() => setDraft(null)} onSave={saveDraft} />}
     {editingNote && <AnnotationEditor initialContent={editingNote.content} onCancel={() => setEditingNote(null)} onSave={saveEditedNote} />}
     {editingCase && <CaseFormModal projectId={Number(projectId)} members={members} reviewCase={reviewCase} onClose={() => setEditingCase(false)} onSaved={() => { setEditingCase(false); loadCase() }} />}
     <ConfirmDialog open={Boolean(confirm)} danger confirmText="删除" onConfirm={runConfirm} onCancel={() => setConfirm(null)}

@@ -11,6 +11,32 @@ function relativePoint(event, element) {
 const boxOf = (a, b) => ({ x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(a.x - b.x), height: Math.abs(a.y - b.y) })
 const boxStyle = box => ({ left: percent(box.x), top: percent(box.y), width: percent(box.width), height: percent(box.height) })
 
+// 框选结束时把选区从页面画布/图片上裁下来（本地完成，供批注框里做 OCR 识别）
+function captureCrop(box, host) {
+  if (!host) return undefined
+  const canvas = host.querySelector('canvas')
+  const image = host.querySelector('img')
+  try {
+    let source, sx, sy, sw, sh
+    if (canvas) {
+      source = canvas
+      sx = Math.round(box.x * canvas.width); sy = Math.round(box.y * canvas.height)
+      sw = Math.max(1, Math.round(box.width * canvas.width)); sh = Math.max(1, Math.round(box.height * canvas.height))
+    } else if (image?.naturalWidth) {
+      source = image
+      sx = Math.round(box.x * image.naturalWidth); sy = Math.round(box.y * image.naturalHeight)
+      sw = Math.max(1, Math.round(box.width * image.naturalWidth)); sh = Math.max(1, Math.round(box.height * image.naturalHeight))
+    } else return undefined
+    if (sw < 8 || sh < 8) return undefined
+    const out = document.createElement('canvas')
+    out.width = sw; out.height = sh
+    out.getContext('2d').drawImage(source, sx, sy, sw, sh, 0, 0, sw, sh)
+    return out.toDataURL('image/png')
+  } catch {
+    return undefined
+  }
+}
+
 export default function AnnotationOverlay({ pageNumber, notes, numbers, mode, selectedId, draft, onSelect, onDraft }) {
   const overlayRef = useRef(null)
   const [drawing, setDrawing] = useState(null)
@@ -33,7 +59,7 @@ export default function AnnotationOverlay({ pageNumber, notes, numbers, mode, se
     if (!drawing) return
     const box = boxOf(drawing.start, relativePoint(event, overlayRef.current))
     setDrawing(null)
-    if (box.width > 0.01 && box.height > 0.005) onDraft({ page: pageNumber, kind: 'rect', ...box })
+    if (box.width > 0.01 && box.height > 0.005) onDraft({ page: pageNumber, kind: 'rect', ...box, crop: captureCrop(box, overlayRef.current?.parentElement) })
   }
   const selectNote = id => event => {
     event.stopPropagation()

@@ -55,6 +55,13 @@ export function createVoiceAnnotation(fileId, values, audio, filename) {
   return apiClient.post(`${base}/files/${fileId}/annotations/voice`, form, NO_TIMEOUT).then(data)
 }
 export const annotationAudioUrl = annotationId => `/api/v1${base}/annotations/${annotationId}/audio`
+// 框选区域 OCR：选区截图发服务器本地识别文字（患者数据不出服务器）
+export async function ocrAnnotationRegion(fileId, cropDataUrl) {
+  const blob = await (await fetch(cropDataUrl)).blob()
+  const form = new FormData()
+  form.append('image', blob, 'crop.png')
+  return apiClient.post(`${base}/files/${fileId}/ocr`, form, { timeout: 30000 }).then(data)
+}
 export const updateAnnotation = (annotationId, content) => apiClient.put(`${base}/annotations/${annotationId}`, { content })
 export const deleteAnnotation = annotationId => apiClient.delete(`${base}/annotations/${annotationId}`)
 

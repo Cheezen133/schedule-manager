@@ -558,11 +558,22 @@ def create_case(project_id: int, data: CaseIn, db: Session = Depends(get_db), cu
     db.add(item); db.commit(); db.refresh(item)
     return {"code": 0, "data": {"id": item.id}}
 
+# 病历文件的默认排序：按文书类型归类（入院→出院→检验→检查→临时医嘱→长期医嘱），文件名含关键词即归类，其余（会诊单、病理报告等）排最后
+FILE_KIND_ORDER = (("入院", 1), ("出院", 2), ("检验", 3), ("检查", 4), ("临时医嘱", 5), ("长期医嘱", 6))
+
+def file_kind_rank(name):
+    text = name or ""
+    for keyword, rank in FILE_KIND_ORDER:
+        if keyword in text:
+            return rank
+    return 7
+
 @router.get("/cases/{case_id}")
 def get_case(case_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     item, project = visible_case(case_id, current_user, db)
     perms = permissions_of(project, current_user, db)
     files = db.query(ReviewCaseFile).filter_by(case_id=item.id).order_by(ReviewCaseFile.created_at, ReviewCaseFile.id).all()
+    files.sort(key=lambda f: (file_kind_rank(f.name), f.created_at, f.id))  # 同类内按上传先后
     file_note_counts = dict(db.query(ReviewAnnotation.file_id, func.count(ReviewAnnotation.id)).filter(ReviewAnnotation.file_id.in_([f.id for f in files])).group_by(ReviewAnnotation.file_id).all()) if files else {}
     conclusions = db.query(ReviewConclusion).filter_by(case_id=item.id).order_by(ReviewConclusion.updated_at.desc(), ReviewConclusion.id.desc()).all()
     file_counts, note_counts, latest = case_rows([item], db)

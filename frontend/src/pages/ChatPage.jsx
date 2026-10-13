@@ -463,9 +463,10 @@ export default function ChatPage() {
   const handleNewChat = async (userId) => {
     try {
       const res = await createConversation(userId)
-      if (res.data) { setShowNewChat(false); setActiveId(res.data.id); fetchConvs(); fetchMessages(res.data.id) }
+      // 对方恰好已发来申请时会直接成为好友并新建会话：先刷新会话列表再选中，否则会被「不在列表里就取消选中」的检查取消掉
+      if (res.data) { setShowNewChat(false); await fetchConvs(); setActiveId(res.data.id); fetchMessages(res.data.id) }
       else { setShowNewChat(false); showToast(res.message || '请求已发送') }
-    } catch (err) { alert(err.userMessage || '操作失败') }
+    } catch (err) { showToast(err.userMessage || '操作失败') }
   }
 
   const handleCreateGroup = async () => {

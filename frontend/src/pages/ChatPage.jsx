@@ -1052,6 +1052,14 @@ export default function ChatPage() {
     if (message.sender_id === me?.id) return true
     return Boolean(activeConv?.partner?.is_group && groupCanManage)
   }
+  // 撤回提示文字。撤回后只剩居中一行小字、看不出原来是哪一边的消息，
+  // 所以群主或管理员撤回别人的消息时写明是谁的：「你撤回了张三的一条消息」
+  const recallNotice = message => {
+    const recallerId = message.recalled_by_id ?? message.sender_id
+    const nameOf = (userId, name) => (userId === me?.id ? '你' : (name || '对方'))
+    if (recallerId === message.sender_id) return `${nameOf(message.sender_id, message.sender_name)}撤回了一条消息`
+    return `${nameOf(recallerId, message.recalled_by_name)}撤回了${nameOf(message.sender_id, message.sender_name)}的一条消息`
+  }
   // 消息菜单里的操作：按消息类型、是不是自己发的、在群里的身份决定显示哪些
   const menuMsg = contextMenu?.msg
   const menuMsgFavorited = Boolean(menuMsg && favIds.has(menuMsg.id))
@@ -1235,6 +1243,8 @@ export default function ChatPage() {
             {messages.length === 0 && <div className="empty-state">开始聊天吧</div>}
             {groupedMessages.map((item, idx) => {
               if (item.type === 'date') return <div key={`d-${idx}`} className="chat-date-sep"><span>{item.date}</span></div>
+              // 已撤回的消息不再显示气泡，和日期栏一样居中显示一行小字
+              if (item.is_recalled) return <div key={item.id} className="chat-recall-notice"><span>{recallNotice(item)}</span></div>
               const isMine = item.sender_id === me.id
               const senderName = isMine ? '我' : (item.sender_name || '对方')
               const hasFile = item.file_url != null
@@ -1245,7 +1255,6 @@ export default function ChatPage() {
                   {!isMine && <div className="chat-msg-avatar">{senderName.charAt(0)}</div>}
                   <div className="chat-msg-bubble">
                     <div className="chat-msg-sender">{senderName}</div>
-                    {item.is_recalled ? <div className="chat-msg-recalled">{item.recalled_by_id === me?.id ? '你' : (item.recalled_by_name || senderName)}撤回了一条消息</div> : <>
                     {item.msg_type === 'text' && <div className="chat-msg-text">{item.content}</div>}
                     {item.msg_type === 'image' && hasFile && <ProtectedChatMedia filename={item.file_url.split('/').pop()} type="image" />}
                     {item.msg_type === 'video' && hasFile && <ProtectedChatMedia filename={item.file_url.split('/').pop()} type="video" alt="视频" />}
@@ -1256,10 +1265,9 @@ export default function ChatPage() {
                         <div className="chat-file-dl">⬇</div>
                       </div>
                     )}
-                    </>}
                     <div className="chat-msg-meta">
                       <span className="chat-msg-time">{formatTime(item.created_at)}</span>
-                      {!item.is_recalled && showRead && <span className="chat-read-label">已读</span>}
+                      {showRead && <span className="chat-read-label">已读</span>}
                     </div>
                   </div>
                   {isMine && <div className="chat-msg-avatar me">{senderName.charAt(0)}</div>}

@@ -337,7 +337,8 @@ body:has(.m-layout) { background: var(--ios-bg); }
 .m-layout .chat-msg-meta { margin-top: 2px; }
 .m-layout .chat-msg-image,
 .m-layout .chat-msg-video { max-width: 100%; }
-.m-layout .chat-date-sep span { background: none; color: var(--ios-secondary); font-size: 12px; }
+.m-layout .chat-date-sep span,
+.m-layout .chat-recall-notice span { background: none; color: var(--ios-secondary); font-size: 12px; }
 .m-layout .chat-input-area { padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); border-top: 0.5px solid var(--ios-separator); background: var(--ios-material); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); }
 .m-layout .chat-input-row { gap: 4px; }
 .m-layout .chat-input-row .chat-input-media-btn { flex: none; min-height: 36px; padding: 0 4px; border: 0; background: none; font-size: 22px; }

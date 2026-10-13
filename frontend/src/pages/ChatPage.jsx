@@ -386,7 +386,8 @@ export default function ChatPage() {
   }, [fetchFriendReq])
 
   const handleAcceptFriend = async (reqId) => {
-    try { const res = await acceptFriendRequest(reqId); setShowFriendPanel(false); setActiveId(res.data.id); fetchConvs(); fetchMessages(res.data.id); fetchFriendReq(); showToast('已添加好友') } catch { showToast('操作失败') }
+    // 先刷新会话列表再选中新会话：否则「当前会话不在列表里就取消选中」的检查会抢先把它取消掉
+    try { const res = await acceptFriendRequest(reqId); setShowFriendPanel(false); await fetchConvs(); setActiveId(res.data.id); fetchMessages(res.data.id); fetchFriendReq(); showToast('已添加好友') } catch { showToast('操作失败') }
   }
 
   const handleRejectFriend = async (reqId) => {
@@ -640,7 +641,8 @@ export default function ChatPage() {
     try {
       const result = await createConversation(member.id)
       if (result.data?.id) {
-        setGroupInfoMode(null); setActiveId(result.data.id); navigate(`/chat/${result.data.id}`); await fetchConvs()
+        // 对方恰好已发来申请时会直接成为好友并新建会话：同样要先刷新会话列表再打开，否则会被取消选中并弹回列表
+        setGroupInfoMode(null); await fetchConvs(); setActiveId(result.data.id); navigate(`/chat/${result.data.id}`)
       } else {
         await fetchGroupTools(activeId)
         showToast('好友申请已发送')

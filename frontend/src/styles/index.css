@@ -54,7 +54,10 @@ button {
   transition: background .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease, transform .15s ease;
 }
 
-button:hover:not(:disabled) { border-color: var(--primary-light); color: var(--primary); background: #fafaff; }
+button:hover:not(:disabled) { border-color: var(--primary-light); }
+/* 悬停变色只作为普通按钮的默认效果：这条的优先级（相当于两个元素选择器）高于上面的 button 基础样式、低于任何类选择器，
+   按钮自己定义了文字色和背景（如实心主色按钮）时以按钮自己的为准，避免悬停后文字和背景同色看不清 */
+body button:where(:hover:not(:disabled)) { color: var(--primary); background: #fafaff; }
 button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid rgba(79,70,229,.18); outline-offset: 1px; }
 button:disabled { cursor: not-allowed; opacity: .5; }
 input, textarea, select {

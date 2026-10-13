@@ -133,7 +133,7 @@ git config --global core.autocrlf true
 ```
 
 **Mac**：`python3 -m uvicorn app.main:app --port 8000`（backend 目录）+ `npm run dev`（frontend 目录），
-或自写启动脚本；`.env` 也可指向本地 MySQL。
+或自写启动脚本；`.env` 也可指向本地 MySQL。后端需 Python 3.10～3.12（OCR 依赖不支持 3.13，可用 `uv venv --python 3.12` 建虚拟环境）。
 
 ### 上线流程（仅服务器执行，此处仅备查）
 

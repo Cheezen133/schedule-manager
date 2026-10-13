@@ -10,7 +10,7 @@
 2. 空库先建表：SQLite 库里缺表时按模型定义补建（只建缺的表，不改已有的表和数据）。
    这样全新克隆只要建好 .env、跑这一条命令就能用。
 3. 共用密码：所有测试账号共用一个密码，保存在本机 .env 的 DEV_SEED_PASSWORD（.env 不入库）。
-   .env 里还没有时，自动随机生成一个并追加写入。脚本全程不在屏幕上打印密码。
+   .env 里还没有时，自动随机生成一个，连同账号清单注释一起追加写入。脚本全程不在屏幕上打印密码。
 4. 建账号：清单里缺少的账号就新建并设好角色；已经存在的账号原样跳过，不改密码、不改角色，
    因此可以放心反复运行。
 """
@@ -127,7 +127,11 @@ def load_or_create_password(dry_run):
     with open(env_path, "a", encoding="utf-8") as f:
         if content and not content.endswith("\n"):
             f.write("\n")
-        f.write("\n# 本地测试账号共用密码（scripts/seed_dev_accounts.py 生成；仅本机使用，.env 不入库）\n")
+        # 顺带写一份账号清单作为注释：打开 .env 就能看到有哪些测试账号、共用的是哪个密码
+        f.write("\n# 本地测试账号（scripts/seed_dev_accounts.py 生成；仅本机使用，.env 不入库）\n")
+        for username, nickname, role in DEV_ACCOUNTS:
+            f.write(f"#   {username:<12} {nickname:<8} {role}\n")
+        f.write("# 以上账号共用下面这个密码\n")
         f.write(f"{PASSWORD_KEY}={password}\n")
     return password, f"已随机生成新密码，写入 {env_path} 的 {PASSWORD_KEY}"
 

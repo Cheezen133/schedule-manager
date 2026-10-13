@@ -10,7 +10,7 @@ echo.
 :: 检查 Python
 python --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [错误] 未找到 Python，请先安装 Python 3.10+
+    echo [错误] 未找到 Python，请先安装 Python 3.10～3.12（OCR 依赖不支持 3.13）
     pause
     exit /b 1
 )
@@ -67,8 +67,8 @@ echo ========================================
 echo.
 echo 首次使用：
 echo   1. 打开 http://localhost:5173
-echo   2. 输入手机号登录（验证码: 123456）
-echo   3. 双击运行 promote_first_admin.bat 设置管理员
+echo   2. 点「立即注册」注册账号（系统第一个注册的账号自动成为管理员）
+echo   3. 或在 backend 目录运行 python -m scripts.seed_dev_accounts 建出本地测试账号
 echo.
 
 pause

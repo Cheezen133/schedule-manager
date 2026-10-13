@@ -5,7 +5,7 @@
 ## 功能特性
 
 **日程核心**
-- 📱 手机号验证码登录，JWT 认证
+- 🔐 账号密码登录（凭管理员发放的邀请码注册），JWT 认证
 - 👥 三角色体系：`admin` / `reader`（审核批准、驳回）/ `writer`（录入日程）
 - 📅 FullCalendar 月/周/日视图，日程按状态着色，重要日程红色置顶
 - 📤 iCal 导出（.ics 可导入 Apple/Google/Outlook 日历）
@@ -25,7 +25,7 @@
 | 后端 | Python FastAPI + SQLAlchemy + Pydantic |
 | 数据库 | MySQL（生产，`schedule_manager` 库）/ SQLite（本地开发可用） |
 | 前端 | React 18 + Vite + React Router 6 + FullCalendar + axios |
-| 认证 | JWT（手机号 + 验证码） |
+| 认证 | JWT（账号 + 密码，邀请码注册） |
 
 ## 项目结构
 
@@ -57,7 +57,7 @@ schedule-manager/
 ## 本地开发
 
 ```bash
-# 后端（127.0.0.1 调试，公网访问请走 SSH 隧道）
+# 后端（需 Python 3.10～3.12，OCR 依赖不支持 3.13；127.0.0.1 调试，公网访问请走 SSH 隧道）
 cd backend && pip install -r requirements.txt
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000   # API 文档: /docs
 
@@ -65,9 +65,9 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8000   # API 文档: /doc
 cd frontend && npm install && npm run dev    # http://localhost:5173
 ```
 
-- 开发模式（`DEV_MODE=true`）验证码固定 `123456`
-- 首次登录默认为 `writer`，提升角色：
-  `cd backend && python scripts/promote_user.py --phone 手机号 --role admin`
+- 系统里第一个注册的账号自动成为管理员；之后注册需要管理员发放的邀请码
+- 本地测试账号：`cd backend && python -m scripts.seed_dev_accounts`（详见 AGENTS.md「本地运行」）
+- 调整角色：`cd backend && python scripts/promote_user.py --username 用户名 --role admin`（`--list` 列出全部用户）
 
 ## 生产部署（当前线上架构）
 
@@ -90,5 +90,5 @@ bash update.sh        # 自动：备份→拉代码→装依赖→构建→发�
 | `DATABASE_URL` | 数据库连接 | `mysql+pymysql://user:***@localhost:3306/schedule_manager` |
 | `JWT_SECRET_KEY` | JWT 签名密钥 | 64 位以上随机字符串 |
 | `JWT_EXPIRE_HOURS` | 令牌有效期 | 168 |
-| `DEV_MODE` | 开发模式（固定验证码） | false |
+| `DEV_MODE` | 历史遗留（原用于固定验证码），现已不起作用 | false |
 | `CORS_ORIGINS` | 跨域白名单 | `*` |

@@ -8,4 +8,4 @@ python-multipart>=0.0.9
 icalendar>=5.0.0
 slowapi>=0.1.9
 python-dotenv>=1.0.0
-rapidocr-onnxruntime
+rapidocr-onnxruntime  # 病历批注 OCR；只支持 Python 3.12 及以下（3.13 装不上）

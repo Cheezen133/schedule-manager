@@ -92,6 +92,7 @@ def main():
             add_column(connection, "review_conclusions", columns, "audio_path", "VARCHAR(500)")
             add_column(connection, "review_conclusions", columns, "audio_type", "VARCHAR(100)")
             add_column(connection, "review_conclusions", columns, "audio_duration", "INTEGER")
+    # v3：会话标签（新表 conversation_tags、conversation_tag_links 由下面的 create_all 幂等创建，不改现有表）
     Base.metadata.create_all(bind=engine)
     missing = schema_differences()
     if missing:

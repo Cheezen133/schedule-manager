@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, 
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, Field
 
 from ..database import get_db
@@ -20,6 +21,7 @@ from ..models.chat_message import ChatMessage
 from ..models.shared_file import SharedFile
 from ..models.memo import GroupAnnouncement, GroupTodo
 from ..models.favorite import FavoriteMessage
+from ..models.conversation_tag import ConversationTag, ConversationTagLink
 from ..models.notification import Notification
 from ..services.notification_service import create_notification
 from ..utils.datetime_utils import to_beijing_iso
@@ -35,6 +37,12 @@ class TextMessageRequest(BaseModel):
 
 class RemarkRequest(BaseModel):
     remark: str = Field(..., max_length=50)
+
+class TagNameRequest(BaseModel):
+    name: str = Field(..., max_length=20)
+
+class ConversationTagsRequest(BaseModel):
+    tag_ids: list[int] = Field(default_factory=list)
 
 
 class GroupCreateRequest(BaseModel):
@@ -762,6 +770,118 @@ async def set_remark(
 
     db.commit()
     return {"code": 0, "message": "备注名已更新", "data": None}
+
+
+# ==================== 会话标签 ====================
+# 标签是个人私有的：每个用户给自己的好友会话、群聊分类，别人看不到
+
+def _require_own_tag(db: Session, tag_id: int, current_user: User) -> ConversationTag:
+    tag = db.query(ConversationTag).filter(ConversationTag.id == tag_id, ConversationTag.user_id == current_user.id).first()
+    if not tag:
+        raise HTTPException(status_code=404, detail="标签不存在")
+    return tag
+
+
+def _clean_tag_name(db: Session, name: str, current_user: User, exclude_id: int | None = None) -> str:
+    value = name.strip()
+    if not value:
+        raise HTTPException(status_code=400, detail="标签名称不能为空")
+    query = db.query(ConversationTag).filter(ConversationTag.user_id == current_user.id, ConversationTag.name == value)
+    if exclude_id is not None:
+        query = query.filter(ConversationTag.id != exclude_id)
+    if query.first():
+        raise HTTPException(status_code=409, detail="已有同名标签")
+    return value
+
+
+def _commit_tag_name(db: Session):
+    # MySQL 默认排序规则不区分大小写，「ABC」和「abc」会撞唯一约束，统一按同名标签处理
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="已有同名标签")
+
+
+@router.get("/tags", summary="我的会话标签")
+async def list_conversation_tags(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """返回当前用户的全部标签，以及每个标签下的会话 ID"""
+    tags = db.query(ConversationTag).filter(ConversationTag.user_id == current_user.id).order_by(ConversationTag.id).all()
+    conversation_ids = {tag.id: [] for tag in tags}
+    if tags:
+        links = db.query(ConversationTagLink).filter(
+            ConversationTagLink.tag_id.in_(list(conversation_ids)),
+        ).order_by(ConversationTagLink.id).all()
+        for link in links:
+            conversation_ids[link.tag_id].append(link.conversation_id)
+    return {"code": 0, "data": [{"id": tag.id, "name": tag.name, "conversation_ids": conversation_ids[tag.id]} for tag in tags]}
+
+
+@router.post("/tags", summary="新建会话标签")
+async def create_conversation_tag(
+    body: TagNameRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    tag = ConversationTag(user_id=current_user.id, name=_clean_tag_name(db, body.name, current_user))
+    db.add(tag)
+    _commit_tag_name(db)
+    db.refresh(tag)
+    return {"code": 0, "message": "标签已创建", "data": {"id": tag.id, "name": tag.name, "conversation_ids": []}}
+
+
+@router.put("/tags/{tag_id}", summary="重命名会话标签")
+async def rename_conversation_tag(
+    tag_id: int,
+    body: TagNameRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    tag = _require_own_tag(db, tag_id, current_user)
+    tag.name = _clean_tag_name(db, body.name, current_user, exclude_id=tag.id)
+    _commit_tag_name(db)
+    return {"code": 0, "message": "标签已重命名", "data": {"id": tag.id, "name": tag.name}}
+
+
+@router.delete("/tags/{tag_id}", summary="删除会话标签")
+async def delete_conversation_tag(
+    tag_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """删除标签只是去掉这个分类，会话和聊天记录都不受影响"""
+    tag = _require_own_tag(db, tag_id, current_user)
+    # 先删对应关系再删标签：SQLite 默认不执行外键级联，显式删除让各数据库结果一致
+    db.query(ConversationTagLink).filter(ConversationTagLink.tag_id == tag.id).delete(synchronize_session=False)
+    db.delete(tag)
+    db.commit()
+    return {"code": 0, "message": "标签已删除", "data": None}
+
+
+@router.put("/conversations/{conv_id}/tags", summary="设置会话的标签")
+async def set_conversation_tags(
+    conv_id: int,
+    body: ConversationTagsRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """用提交的标签整体替换当前用户在该会话上的标签；传空列表即清除"""
+    conv = _require_conversation_member(db, conv_id, current_user)
+    own_tag_ids = {row.id for row in db.query(ConversationTag.id).filter(ConversationTag.user_id == current_user.id).all()}
+    tag_ids = sorted(set(body.tag_ids))
+    if any(tag_id not in own_tag_ids for tag_id in tag_ids):
+        raise HTTPException(status_code=404, detail="标签不存在")
+    if own_tag_ids:
+        db.query(ConversationTagLink).filter(
+            ConversationTagLink.conversation_id == conv.id,
+            ConversationTagLink.tag_id.in_(list(own_tag_ids)),
+        ).delete(synchronize_session=False)
+    db.add_all([ConversationTagLink(tag_id=tag_id, conversation_id=conv.id) for tag_id in tag_ids])
+    db.commit()
+    return {"code": 0, "message": "标签已更新", "data": {"conversation_id": conv.id, "tag_ids": tag_ids}}
 
 
 # ==================== 已读 ====================

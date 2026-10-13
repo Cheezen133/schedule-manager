@@ -304,6 +304,13 @@ body:has(.m-layout) { background: var(--ios-bg); }
 .m-layout .chat-conv-tabs button { min-height: 32px; border-radius: 7px; color: var(--ios-label); font-size: 14px; font-weight: 500; }
 .m-layout .chat-conv-tabs button.active { background: var(--ios-cell); color: var(--ios-label); font-weight: 600; box-shadow: 0 3px 8px rgba(0, 0, 0, 0.12), 0 3px 1px rgba(0, 0, 0, 0.04); }
 .m-layout .chat-conv-tab-badge { background: var(--ios-red); font-size: 12px; }
+/* 标签筛选条与会话标签名 */
+.m-layout .chat-tag-filter { gap: 8px; margin: -4px 0 12px; padding: 0; }
+.m-layout .chat-tag-filter button { min-height: 30px; padding: 0 12px; border: 0; border-radius: 15px; background: var(--ios-cell); color: var(--ios-label); font-size: 14px; }
+.m-layout .chat-tag-filter button.active { background: var(--ios-tint); color: #fff; font-weight: 600; }
+.m-layout .chat-tag-filter .chat-tag-manage { color: var(--ios-tint); }
+.m-layout .chat-tag-dot { border-color: var(--ios-bg); background: var(--ios-red); }
+.m-layout .chat-conv-tags { color: var(--ios-secondary); font-size: 12px; }
 .m-layout .chat-conv-list { overflow: hidden; border-radius: 10px; background: var(--ios-cell); }
 .m-layout .chat-conv-item { position: relative; gap: 12px; padding: 10px 16px; border: 0; }
 .m-layout .chat-conv-item + .chat-conv-item::before { position: absolute; top: 0; right: 0; left: 76px; border-top: 0.5px solid var(--ios-separator); content: ''; }

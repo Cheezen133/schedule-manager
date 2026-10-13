@@ -21,6 +21,32 @@ export async function setRemark(convId, remark) {
   return res.data
 }
 
+// 会话标签（个人私有，只有自己看得到）
+export async function getConversationTags() {
+  const res = await apiClient.get('/chat/tags')
+  return res.data
+}
+
+export async function createConversationTag(name) {
+  const res = await apiClient.post('/chat/tags', { name })
+  return res.data
+}
+
+export async function renameConversationTag(tagId, name) {
+  const res = await apiClient.put(`/chat/tags/${tagId}`, { name })
+  return res.data
+}
+
+export async function deleteConversationTag(tagId) {
+  const res = await apiClient.delete(`/chat/tags/${tagId}`)
+  return res.data
+}
+
+export async function setConversationTags(convId, tagIds) {
+  const res = await apiClient.put(`/chat/conversations/${convId}/tags`, { tag_ids: tagIds })
+  return res.data
+}
+
 export async function getMessages(convId, beforeId, limit = 30) {
   const params = { limit }
   if (beforeId) params.before_id = beforeId

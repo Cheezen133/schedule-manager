@@ -1872,6 +1872,94 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
   text-align: center;
 }
 
+/* 标签筛选条：横向滑动，点选后只看该标签下的会话；小红点表示该标签下有未读 */
+.chat-tag-filter {
+  display: flex;
+  gap: 0.35rem;
+  padding: 0.5rem 1rem 0.25rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.chat-tag-filter::-webkit-scrollbar { display: none; }
+
+.chat-tag-filter button {
+  position: relative;
+  flex-shrink: 0;
+  min-height: 26px;
+  padding: 0 0.65rem;
+  border: 1px solid var(--gray-200);
+  border-radius: 13px;
+  background: white;
+  color: var(--gray-600);
+  font: inherit;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.chat-tag-filter button.active {
+  border-color: var(--primary);
+  background: #eef2ff;
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.chat-tag-filter .chat-tag-manage {
+  border-style: dashed;
+  color: var(--gray-500);
+}
+
+.chat-tag-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid white;
+  border-radius: 50%;
+  background: var(--danger);
+}
+
+/* 会话右侧：时间在上，标签名在下 */
+.chat-conv-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  align-self: flex-start;
+  flex-shrink: 0;
+  max-width: 40%;
+  min-width: 0;
+}
+
+.chat-conv-side .chat-conv-time { align-self: auto; }
+
+.chat-conv-tags {
+  max-width: 100%;
+  margin-top: 0.2rem;
+  overflow: hidden;
+  color: var(--gray-500);
+  font-size: 0.7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 设置标签、管理标签弹窗 */
+.modal.chat-tag-modal { width: 420px; max-width: calc(100vw - 2rem); }
+.chat-tag-hint { margin: 0 0 0.75rem; color: var(--gray-500); font-size: 0.85rem; }
+.chat-tag-options { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
+.chat-tag-options button { min-height: 32px; padding: 0 0.85rem; border: 1px solid var(--gray-300); border-radius: 16px; background: white; color: var(--gray-700); font: inherit; font-size: 0.85rem; cursor: pointer; }
+.chat-tag-options button.selected { border-color: var(--primary); background: var(--primary); color: white; }
+.chat-tag-empty { color: var(--gray-400); font-size: 0.85rem; }
+.chat-tag-create { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; }
+.chat-tag-create input, .chat-tag-manage-row input { flex: 1; min-width: 0; padding: 0.5rem 0.75rem; border: 1px solid var(--gray-300); border-radius: 8px; font: inherit; }
+.chat-tag-manage-list { display: flex; flex-direction: column; max-height: 320px; margin-bottom: 1rem; overflow-y: auto; }
+.chat-tag-manage-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.6rem 0; border-bottom: 1px solid var(--gray-100); }
+.chat-tag-manage-row > span:first-child { display: flex; flex-direction: column; min-width: 0; }
+.chat-tag-manage-row small { color: var(--gray-500); font-size: 0.75rem; }
+.chat-tag-row-actions { display: flex; flex-shrink: 0; gap: 0.75rem; }
+.chat-tag-row-actions .danger { color: var(--danger); }
+
 .chat-conv-list {
   flex: 1;
   overflow-y: auto;

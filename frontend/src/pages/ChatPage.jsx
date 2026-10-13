@@ -13,6 +13,7 @@ import {
   getGroupMembers, getGroupAnnouncements, createGroupAnnouncement,
   deleteGroupAnnouncement, getGroupTodos, createGroupTodo, toggleGroupTodo, deleteGroupTodo,
   renameGroup, addGroupMembers, setGroupMemberRole, removeGroupMember, dissolveGroup,
+  getConversationTags, createConversationTag, renameConversationTag, deleteConversationTag, setConversationTags,
 } from '../api/chat'
 import { getNotifications } from '../api/notifications'
 import { ConfirmDialog } from '../components/common/Ui'
@@ -123,6 +124,57 @@ function GroupRenameModal({ initialName, onClose, onSubmit }) {
   return <div className="modal-overlay" onMouseDown={onClose}><form className="modal group-rename-modal" onMouseDown={event => event.stopPropagation()} onSubmit={event => { event.preventDefault(); if (name.trim()) onSubmit(name.trim()) }}><div className="modal-header"><div><span className="file-eyebrow">群聊设置</span><h3>修改群聊名称</h3></div><button type="button" className="text-button" onClick={onClose}>关闭</button></div><label>群聊名称<input autoFocus required value={name} onChange={event => setName(event.target.value)} placeholder="请输入群聊名称" maxLength={50} /></label><p className="group-source-hint">修改后会同步给所有群成员及团队群聊备忘录。</p><div className="modal-actions"><button type="button" className="btn-secondary" onClick={onClose}>取消</button><button className="btn-primary">保存名称</button></div></form></div>
 }
 
+// 给一个会话设置标签：点选已有标签（可多选），也可以当场新建
+function TagAssignModal({ conversationName, tags, selectedIds, onClose, onSubmit, onCreateTag }) {
+  const [selected, setSelected] = useState(selectedIds)
+  const [newName, setNewName] = useState('')
+  const [saving, setSaving] = useState(false)
+  const toggle = id => setSelected(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id])
+  const addTag = async () => {
+    const name = newName.trim()
+    if (!name) return
+    const tag = await onCreateTag(name)
+    if (tag) { setSelected(prev => [...prev, tag.id]); setNewName('') }
+  }
+  const submit = async () => { setSaving(true); await onSubmit(selected); setSaving(false) }
+  return <div className="modal-overlay" onMouseDown={onClose}><section className="modal chat-tag-modal" onMouseDown={event => event.stopPropagation()}>
+    <div className="modal-header"><div><span className="file-eyebrow">会话标签</span><h3>设置标签</h3></div><button type="button" className="text-button" onClick={onClose}>关闭</button></div>
+    <p className="chat-tag-hint">给「{conversationName}」选择标签，可以多选；标签只有你自己看得到。</p>
+    <div className="chat-tag-options">
+      {tags.map(tag => <button key={tag.id} type="button" className={selected.includes(tag.id) ? 'selected' : ''} aria-pressed={selected.includes(tag.id)} onClick={() => toggle(tag.id)}>{selected.includes(tag.id) ? '✓ ' : ''}{tag.name}</button>)}
+      {!tags.length && <span className="chat-tag-empty">还没有标签，在下面新建一个</span>}
+    </div>
+    <div className="chat-tag-create"><input value={newName} onChange={event => setNewName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); addTag() } }} placeholder="新建标签，如：患者群" maxLength={20} /><button type="button" className="btn-secondary" disabled={!newName.trim()} onClick={addTag}>新建</button></div>
+    <div className="modal-actions"><button type="button" className="btn-cancel" onClick={onClose}>取消</button><button type="button" className="btn-submit" disabled={saving} onClick={submit}>{saving ? '保存中…' : '保存'}</button></div>
+  </section></div>
+}
+
+// 管理全部标签：新建、改名、删除（删除前由页面弹出确认框）
+function TagManageModal({ tags, convIds, onClose, onCreate, onRename, onDelete }) {
+  const [newName, setNewName] = useState('')
+  const [editing, setEditing] = useState(null)
+  const addTag = async () => { const name = newName.trim(); if (name && await onCreate(name)) setNewName('') }
+  const saveRename = async () => { const name = editing?.name.trim(); if (name && await onRename(editing.id, name)) setEditing(null) }
+  return <div className="modal-overlay" onMouseDown={onClose}><section className="modal chat-tag-modal" onMouseDown={event => event.stopPropagation()}>
+    <div className="modal-header"><div><span className="file-eyebrow">会话标签</span><h3>管理标签</h3></div><button type="button" className="text-button" onClick={onClose}>关闭</button></div>
+    <p className="chat-tag-hint">在会话上右键（手机上长按）就能给它设置标签；标签只有你自己看得到。</p>
+    <div className="chat-tag-manage-list">
+      {tags.map(tag => <div key={tag.id} className="chat-tag-manage-row">
+        {editing?.id === tag.id
+          ? <input autoFocus value={editing.name} onChange={event => setEditing({ ...editing, name: event.target.value })} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); saveRename() } }} maxLength={20} aria-label="标签新名称" />
+          : <span><strong>{tag.name}</strong><small>{tag.conversation_ids.filter(id => convIds.has(id)).length} 个会话</small></span>}
+        <span className="chat-tag-row-actions">
+          {editing?.id === tag.id
+            ? <><button type="button" className="text-button" onClick={saveRename}>保存</button><button type="button" className="text-button" onClick={() => setEditing(null)}>取消</button></>
+            : <><button type="button" className="text-button" onClick={() => setEditing({ id: tag.id, name: tag.name })}>改名</button><button type="button" className="text-button danger" onClick={() => onDelete(tag)}>删除</button></>}
+        </span>
+      </div>)}
+      {!tags.length && <div className="chat-tag-empty">还没有标签</div>}
+    </div>
+    <div className="chat-tag-create"><input value={newName} onChange={event => setNewName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); addTag() } }} placeholder="新建标签" maxLength={20} /><button type="button" className="btn-secondary" disabled={!newName.trim()} onClick={addTag}>新建</button></div>
+  </section></div>
+}
+
 function GroupInviteModal({ contacts, members, submitting, onClose, onSubmit }) {
   const [query, setQuery] = useState('')
   const [selectedIds, setSelectedIds] = useState([])
@@ -160,6 +212,12 @@ export default function ChatPage() {
     try { return localStorage.getItem(CONV_TAB_KEY) === 'groups' ? 'groups' : 'friends' } catch { return 'friends' }
   })
   const syncedTabConvRef = useRef(null)
+  // 会话标签（个人私有）：我的标签、各页签选中的标签筛选（null 为全部）、正在设置标签的会话、管理弹窗、待确认删除的标签
+  const [convTags, setConvTags] = useState([])
+  const [tagFilter, setTagFilter] = useState({ friends: null, groups: null })
+  const [tagAssignConv, setTagAssignConv] = useState(null)
+  const [showTagManager, setShowTagManager] = useState(false)
+  const [pendingTagDelete, setPendingTagDelete] = useState(null)
   const isMobile = useIsMobile()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [messages, setMessages] = useState([])
@@ -292,6 +350,11 @@ export default function ChatPage() {
     }, 15000)
     return () => window.clearInterval(timer)
   }, [fetchConvs])
+  // 标签只会因本人操作而变化：进入聊天页加载一次，增删改之后再刷新
+  const fetchTags = useCallback(async () => {
+    try { const res = await getConversationTags(); setConvTags(res.data || []) } catch {}
+  }, [])
+  useEffect(() => { fetchTags() }, [fetchTags])
   useEffect(() => { if (conversationId) setActiveId(parseInt(conversationId)) }, [conversationId])
   // 手机端：会话列表（/chat）和聊天窗口（/chat/会话号）是前后两页，由网址决定显示哪一页。
   // 回到列表时清空当前会话；在列表里选中会话（点击、搜索结果、新建等）时跳转到聊天窗口，返回键即可回到列表
@@ -310,8 +373,11 @@ export default function ChatPage() {
     const conv = convs.find(item => item.id === activeId)
     if (!conv) return
     syncedTabConvRef.current = activeId
-    setConvTab(conv.partner?.is_group ? 'groups' : 'friends')
-  }, [activeId, convs])
+    const tab = conv.partner?.is_group ? 'groups' : 'friends'
+    setConvTab(tab)
+    // 当前会话不带已选的标签时，该页签退回「全部」，同样是为了让它在列表里可见
+    setTagFilter(prev => (prev[tab] && !convTags.some(tag => tag.id === prev[tab] && tag.conversation_ids.includes(conv.id)) ? { ...prev, [tab]: null } : prev))
+  }, [activeId, convs, convTags])
   useEffect(() => {
     if (!loading && activeId && !convs.some(item => item.id === activeId)) {
       setActiveId(null); setMessages([]); setShowGroupMenu(false); navigate('/chat')
@@ -455,6 +521,27 @@ export default function ChatPage() {
   // 「＋」按当前页签行事：好友页签发起新聊天（添加好友），群聊页签直接创建群聊
   const openAddForTab = () => (convTab === 'groups' ? openGroupModal() : openNewChat())
 
+  // 会话标签：给会话设置标签、新建 / 改名 / 删除标签，成功后重新拉取标签列表
+  const openTagAssign = (convId) => { setTagAssignConv(convs.find((c) => c.id === convId) || null); setFriendContext(null) }
+  const saveConversationTags = async (tagIds) => {
+    if (!tagAssignConv) return
+    try { await setConversationTags(tagAssignConv.id, tagIds); setTagAssignConv(null); await fetchTags(); showToast('标签已更新') }
+    catch (err) { showToast(err.userMessage || '保存标签失败') }
+  }
+  const createTag = async (name) => {
+    try { const res = await createConversationTag(name); await fetchTags(); return res.data }
+    catch (err) { showToast(err.userMessage || '新建标签失败'); return null }
+  }
+  const renameTag = async (tagId, name) => {
+    try { await renameConversationTag(tagId, name); await fetchTags(); return true }
+    catch (err) { showToast(err.userMessage || '重命名标签失败'); return false }
+  }
+  const confirmDeleteTag = async () => {
+    if (!pendingTagDelete) return
+    try { await deleteConversationTag(pendingTagDelete.id); setPendingTagDelete(null); await fetchTags(); showToast('标签已删除') }
+    catch (err) { showToast(err.userMessage || '删除标签失败') }
+  }
+
   const handleSendText = async () => {
     const trimmed = text.trim()
     if (!trimmed || !activeId || sending) return
@@ -548,11 +635,11 @@ export default function ChatPage() {
     try { await requestManagement(user.id); showToast(`已向 ${user.display_name || user.nickname} 发送日程管理申请`) } catch (error) { showToast(error.userMessage || '申请发送失败') }
   }
 
+  // 会话右键（手机长按）菜单：好友和群聊都能设置标签；好友另有申请管理日程、删除好友
   const openFriendContextMenu = (event, conversation) => {
-    if (conversation.partner.is_group) return
     event.preventDefault()
     event.stopPropagation()
-    setFriendContext({ x: event.clientX, y: event.clientY, user: conversation.partner, conversationId: conversation.id })
+    setFriendContext({ x: event.clientX, y: event.clientY, user: conversation.partner, conversationId: conversation.id, isGroup: Boolean(conversation.partner.is_group) })
   }
 
   const confirmDeleteFriend = async () => {
@@ -790,7 +877,19 @@ export default function ChatPage() {
   // 按页签拆分会话列表（顺序保持接口返回的顺序）；页签上的数字是该分类里有未读的会话数
   const friendConvs = convs.filter((c) => !c.partner?.is_group)
   const groupConvs = convs.filter((c) => c.partner?.is_group)
-  const visibleConvs = convTab === 'groups' ? groupConvs : friendConvs
+  // 标签：会话 → 它的标签；筛选条只列出用在本页签会话上的标签，已选标签不再适用时退回「全部」
+  const tagsByConv = {}
+  for (const tag of convTags) {
+    for (const convId of tag.conversation_ids) {
+      if (!tagsByConv[convId]) tagsByConv[convId] = []
+      tagsByConv[convId].push(tag)
+    }
+  }
+  const tabConvs = convTab === 'groups' ? groupConvs : friendConvs
+  const tabTags = convTags.filter((tag) => tabConvs.some((c) => tag.conversation_ids.includes(c.id)))
+  const activeTagId = tabTags.some((tag) => tag.id === tagFilter[convTab]) ? tagFilter[convTab] : null
+  const visibleConvs = activeTagId ? tabConvs.filter((c) => (tagsByConv[c.id] || []).some((tag) => tag.id === activeTagId)) : tabConvs
+  const convIdSet = new Set(convs.map((c) => c.id))
   const convTabs = [
     { key: 'friends', label: '好友', unread: friendConvs.filter((c) => c.has_unread).length },
     { key: 'groups', label: '群聊', unread: groupConvs.filter((c) => c.has_unread).length },
@@ -896,6 +995,15 @@ export default function ChatPage() {
             </button>
           ))}
         </div>
+        <div className="chat-tag-filter" aria-label="按标签筛选">
+          <button type="button" className={!activeTagId ? 'active' : ''} onClick={() => setTagFilter((prev) => ({ ...prev, [convTab]: null }))}>全部</button>
+          {tabTags.map((tag) => (
+            <button key={tag.id} type="button" className={activeTagId === tag.id ? 'active' : ''} onClick={() => setTagFilter((prev) => ({ ...prev, [convTab]: tag.id }))}>
+              {tag.name}{tabConvs.some((c) => c.has_unread && tag.conversation_ids.includes(c.id)) && <span className="chat-tag-dot" aria-label="有未读" />}
+            </button>
+          ))}
+          <button type="button" className="chat-tag-manage" onClick={() => setShowTagManager(true)}>{convTags.length ? '管理标签' : '＋ 标签'}</button>
+        </div>
         <div className="chat-conv-list">
           {visibleConvs.map((c) => (
             <div key={c.id} className={`chat-conv-item ${c.id === activeId ? 'active' : ''}`} onClick={() => setActiveId(c.id)} onContextMenu={event => openFriendContextMenu(event, c)} {...longPressProps(event => openFriendContextMenu(event, c))}>
@@ -904,7 +1012,10 @@ export default function ChatPage() {
                 <div className="chat-conv-name">{c.partner.display_name}{c.partner.remark && <span className="chat-conv-remark-tag">备注</span>}</div>
                 <div className="chat-conv-preview">{previewLabel(c.last_message)}</div>
               </div>
-              <div className="chat-conv-time">{c.last_message ? formatTime(c.last_message.created_at) : ''}</div>
+              <div className="chat-conv-side">
+                <div className="chat-conv-time">{c.last_message ? formatTime(c.last_message.created_at) : ''}</div>
+                {tagsByConv[c.id] && <div className="chat-conv-tags">{tagsByConv[c.id].map((tag) => tag.name).join(' · ')}</div>}
+              </div>
             </div>
           ))}
           {!loading && visibleConvs.length === 0 && <div className="empty-state">{convTab === 'groups' ? '暂未加入群聊' : '暂无好友对话，添加好友开始聊天'}</div>}
@@ -1236,7 +1347,7 @@ export default function ChatPage() {
           {activeConv?.partner?.is_group && groupCanManage && <><div className="context-menu-divider" /><div className="context-menu-item" onClick={() => createFromMessage('announcement')}>设为群公告</div><div className="context-menu-item" onClick={() => createFromMessage('todo')}>设为群待办</div></>}
         </div>
       )}
-      {friendContext && <div className="context-menu" style={{ top: friendContext.y, left: friendContext.x }}><div className="context-menu-item" onClick={() => requestScheduleManagement(friendContext.user)}>申请管理日程</div><div className="context-menu-divider" /><div className="context-menu-item danger" onClick={() => { setPendingFriendDelete(friendContext); setFriendContext(null) }}>删除好友</div></div>}
+      {friendContext && <div className="context-menu" style={{ top: friendContext.y, left: friendContext.x }}><div className="context-menu-item" onClick={() => openTagAssign(friendContext.conversationId)}>设置标签</div>{!friendContext.isGroup && <><div className="context-menu-divider" /><div className="context-menu-item" onClick={() => requestScheduleManagement(friendContext.user)}>申请管理日程</div><div className="context-menu-divider" /><div className="context-menu-item danger" onClick={() => { setPendingFriendDelete(friendContext); setFriendContext(null) }}>删除好友</div></>}</div>}
       {groupRecordContext && <div className="context-menu" style={{ top: groupRecordContext.y, left: groupRecordContext.x }}><div className="context-menu-item danger" onClick={() => { setPendingGroupRecordDelete(groupRecordContext); setGroupRecordContext(null) }}>删除{groupRecordContext.type === 'announcement' ? '群公告' : '群待办'}</div></div>}
       {groupMemberContext && <div className="context-menu" style={{ top: groupMemberContext.y, left: groupMemberContext.x }}>
         {groupMemberContext.member.friendship_status === 'friend' && <div className="context-menu-item" onClick={() => handleGroupMemberFriendAction(groupMemberContext.member)}>发消息</div>}
@@ -1256,6 +1367,9 @@ export default function ChatPage() {
           onClose={() => setTagModal(null)}
         />
       )}
+      {tagAssignConv && <TagAssignModal conversationName={tagAssignConv.partner.display_name} tags={convTags} selectedIds={(tagsByConv[tagAssignConv.id] || []).map((tag) => tag.id)} onClose={() => setTagAssignConv(null)} onSubmit={saveConversationTags} onCreateTag={createTag} />}
+      {showTagManager && <TagManageModal tags={convTags} convIds={convIdSet} onClose={() => setShowTagManager(false)} onCreate={createTag} onRename={renameTag} onDelete={(tag) => setPendingTagDelete(tag)} />}
+      <ConfirmDialog open={pendingTagDelete !== null} danger title="删除标签" message={`删除标签「${pendingTagDelete?.name || ''}」后，会话和聊天记录都不受影响，只是去掉这个分类。`} confirmText="删除标签" onCancel={() => setPendingTagDelete(null)} onConfirm={confirmDeleteTag} />
       <ConfirmDialog open={pendingDeleteId !== null} danger title="删除消息" message="确定删除这条消息吗？删除后无法恢复。" confirmText="删除" onCancel={() => setPendingDeleteId(null)} onConfirm={confirmDelete} />
       <ConfirmDialog open={pendingRecallMessage !== null} danger title="撤回消息" message="撤回后，所有会话成员将看到撤回提示，且消息内容无法恢复。" confirmText="撤回" onCancel={() => setPendingRecallMessage(null)} onConfirm={confirmRecall} />
       <ConfirmDialog open={pendingFriendDelete !== null} danger title="删除好友" message={`删除 ${pendingFriendDelete?.user?.display_name || pendingFriendDelete?.user?.nickname || '该好友'} 后，双方私聊将隐藏且日程授权会立即撤销；重新添加后可恢复历史聊天。`} confirmText="删除好友" onCancel={() => setPendingFriendDelete(null)} onConfirm={confirmDeleteFriend} />

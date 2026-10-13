@@ -122,6 +122,8 @@ DEV_MODE=true
 
 与服务器环境完全隔离，互不影响。
 
+**测试账号**：backend 目录下运行 `python -m scripts.seed_dev_accounts`，建出本地测试账号（管理员 localadmin、审核员 reader1、录入员 writer1／writer2）；仅限 SQLite，空库会先建表，已存在的账号跳过；共用密码在本机 `.env` 的 `DEV_SEED_PASSWORD`，缺失时自动生成并写入。
+
 **Windows**：创建好 `.env` 后，双击仓库根目录的 `start.bat` 一键启动
 （自动装依赖 → 起 backend:8000 + frontend:5173 两个窗口）。
 首次使用前建议设置换行符，避免 CRLF 污染 diff：

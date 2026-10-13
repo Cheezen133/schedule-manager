@@ -145,6 +145,9 @@ function GroupInfoModal({ mode, members, announcements, todos, memberQuery, setM
   return <div className="modal-overlay" onMouseDown={onClose}><section className="modal group-info-modal" onMouseDown={event => event.stopPropagation()}><div className="modal-header"><div><span className="file-eyebrow">群聊信息</span><h3>{title}</h3></div><button className="text-button" onClick={onClose}>关闭</button></div>{mode === 'members' && <><label className="ui-search-field"><span>⌕</span><input value={memberQuery} onChange={event => setMemberQuery(event.target.value)} placeholder="搜索群成员" /></label><p className="group-info-count">共 {members.length} 位成员 · {managementHint}</p><div className="group-member-list">{filteredMembers.map(member => <div key={member.id} className="group-member-row" onClick={event => onMemberContextMenu(event, member)} onContextMenu={event => onMemberContextMenu(event, member)} {...longPressProps(event => onMemberContextMenu(event, member))}><b>{(member.nickname || member.username || '?').charAt(0)}</b><div><strong>{member.nickname || '未命名成员'}<span className={`group-role-badge ${member.role || 'member'}`}>{roleLabel[member.role] || '成员'}</span></strong><small>@{member.username || '—'}</small></div></div>)}{!filteredMembers.length && <div className="empty-state-small">没有匹配的成员</div>}</div></>}{mode === 'announcements' && <div className="group-record-list">{visibleRecords.map(item => <article key={item.id} onContextMenu={event => onRecordContextMenu(event, 'announcement', item)} {...longPressProps(event => onRecordContextMenu(event, 'announcement', item))}><strong>{item.title}</strong><p>{item.content || '无正文'}</p><small>{item.creator_name || '群成员'} · {formatBeijingDateTime(item.updated_at)}</small></article>)}{!records.length && <div className="empty-state-small">暂无群公告</div>}{records.length > 2 && <button className="text-button group-expand-button" onClick={() => setExpanded(value => !value)}>{expanded ? '收起' : `展开更多（${records.length - 2}）`}</button>}</div>}{mode === 'todos' && <div className="group-record-list">{visibleRecords.map(item => <article key={item.id} onContextMenu={event => onRecordContextMenu(event, 'todo', item)} {...longPressProps(event => onRecordContextMenu(event, 'todo', item))}><button className="todo-check" onClick={() => onToggleTodo(item.id)} aria-label="完成待办"></button><div><strong>{item.title}</strong><small>{item.creator_name || '群成员'} · {formatBeijingDateTime(item.updated_at)}</small></div></article>)}{!records.length && <div className="empty-state-small">暂无群待办</div>}{records.length > 2 && <button className="text-button group-expand-button" onClick={() => setExpanded(value => !value)}>{expanded ? '收起' : `展开更多（${records.length - 2}）`}</button>}</div>}</section></div>
 }
 
+// 会话列表当前页签（好友 / 群聊）在本机浏览器里的存储键
+const CONV_TAB_KEY = 'chat-conv-tab'
+
 export default function ChatPage() {
   const { conversationId } = useParams()
   const navigate = useNavigate()
@@ -152,6 +155,11 @@ export default function ChatPage() {
 
   const [convs, setConvs] = useState([])
   const [activeId, setActiveId] = useState(parseInt(conversationId) || null)
+  // 会话列表分「好友」「群聊」两个页签，默认停在本机上次用的页签；浏览器存储不可用时退回「好友」
+  const [convTab, setConvTab] = useState(() => {
+    try { return localStorage.getItem(CONV_TAB_KEY) === 'groups' ? 'groups' : 'friends' } catch { return 'friends' }
+  })
+  const syncedTabConvRef = useRef(null)
   const isMobile = useIsMobile()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [messages, setMessages] = useState([])
@@ -291,6 +299,19 @@ export default function ChatPage() {
   useEffect(() => {
     if (isMobile && activeId && String(activeId) !== conversationId) navigate(`/chat/${activeId}`)
   }, [isMobile, activeId]) // 只在当前会话变化时跳转，网址变化不触发
+  useEffect(() => {
+    try { localStorage.setItem(CONV_TAB_KEY, convTab) } catch {}
+  }, [convTab])
+  // 打开某个会话（点击、搜索结果、通知链接等）时，若它属于另一个页签就自动切过去，保证当前会话在列表里可见。
+  // 每次打开只同步一次：之后会话列表每 15 秒刷新，不会把用户手动切换的页签又切回去
+  useEffect(() => {
+    if (!activeId) { syncedTabConvRef.current = null; return }
+    if (syncedTabConvRef.current === activeId) return
+    const conv = convs.find(item => item.id === activeId)
+    if (!conv) return
+    syncedTabConvRef.current = activeId
+    setConvTab(conv.partner?.is_group ? 'groups' : 'friends')
+  }, [activeId, convs])
   useEffect(() => {
     if (!loading && activeId && !convs.some(item => item.id === activeId)) {
       setActiveId(null); setMessages([]); setShowGroupMenu(false); navigate('/chat')
@@ -759,6 +780,14 @@ export default function ChatPage() {
   const favoriteFetch = async () => { setFavLoading(true); try { const res = await getFavorites(); setFavorites(res.data || []) } finally { setFavLoading(false); setShowFavPanel(true) } }
 
   const activeConv = convs.find((c) => c.id === activeId)
+  // 按页签拆分会话列表（顺序保持接口返回的顺序）；页签上的数字是该分类里有未读的会话数
+  const friendConvs = convs.filter((c) => !c.partner?.is_group)
+  const groupConvs = convs.filter((c) => c.partner?.is_group)
+  const visibleConvs = convTab === 'groups' ? groupConvs : friendConvs
+  const convTabs = [
+    { key: 'friends', label: '好友', unread: friendConvs.filter((c) => c.has_unread).length },
+    { key: 'groups', label: '群聊', unread: groupConvs.filter((c) => c.has_unread).length },
+  ]
   const mentionOptions = mention && activeConv?.partner?.is_group
     ? groupMembers.filter(member => member.id !== me?.id && `${member.nickname || ''} ${member.username || ''}`.toLowerCase().includes(mention.query.toLowerCase())).slice(0, 8)
     : []
@@ -853,8 +882,15 @@ export default function ChatPage() {
             <button className="btn-submit" onClick={openNewChat} style={{ padding: '0.375rem 0.75rem', fontSize: '0.85rem' }}>+ 新聊天</button>
           </div>
         </div>
+        <div className="chat-conv-tabs" role="tablist" aria-label="会话分类">
+          {convTabs.map((tab) => (
+            <button key={tab.key} type="button" role="tab" aria-selected={convTab === tab.key} className={convTab === tab.key ? 'active' : ''} onClick={() => setConvTab(tab.key)}>
+              {tab.label}{tab.unread > 0 && <span className="chat-conv-tab-badge">{tab.unread}</span>}
+            </button>
+          ))}
+        </div>
         <div className="chat-conv-list">
-          {convs.map((c) => (
+          {visibleConvs.map((c) => (
             <div key={c.id} className={`chat-conv-item ${c.id === activeId ? 'active' : ''}`} onClick={() => setActiveId(c.id)} onContextMenu={event => openFriendContextMenu(event, c)} {...longPressProps(event => openFriendContextMenu(event, c))}>
               <div className={`chat-conv-avatar ${c.has_unread ? 'unread' : ''}`}>{c.partner.display_name.charAt(0).toUpperCase()}</div>
               <div className="chat-conv-info">
@@ -864,7 +900,7 @@ export default function ChatPage() {
               <div className="chat-conv-time">{c.last_message ? formatTime(c.last_message.created_at) : ''}</div>
             </div>
           ))}
-          {!loading && convs.length === 0 && <div className="empty-state">暂无对话，添加好友开始聊天</div>}
+          {!loading && visibleConvs.length === 0 && <div className="empty-state">{convTab === 'groups' ? '暂未加入群聊' : '暂无好友对话，添加好友开始聊天'}</div>}
         </div>
       </div>
 

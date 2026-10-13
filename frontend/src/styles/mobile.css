@@ -299,6 +299,11 @@ body:has(.m-layout) { background: var(--ios-bg); }
 .m-layout .chat-sidebar-header button { flex: 1; min-height: 34px; padding: 0 6px !important; border: 0; border-radius: 10px; background: var(--ios-cell); box-shadow: none; color: var(--ios-tint); font-size: 14px !important; font-weight: 500; white-space: nowrap; }
 .m-layout .chat-sidebar-header button[title]::after { margin-left: 4px; content: attr(title); }
 .m-layout .chat-sidebar-header .btn-submit { display: none; }
+/* 「好友 / 群聊」页签：iOS 分段控件 */
+.m-layout .chat-conv-tabs { margin: 0 0 14px; padding: 2px; border-radius: 9px; background: var(--ios-fill); }
+.m-layout .chat-conv-tabs button { min-height: 32px; border-radius: 7px; color: var(--ios-label); font-size: 14px; font-weight: 500; }
+.m-layout .chat-conv-tabs button.active { background: var(--ios-cell); color: var(--ios-label); font-weight: 600; box-shadow: 0 3px 8px rgba(0, 0, 0, 0.12), 0 3px 1px rgba(0, 0, 0, 0.04); }
+.m-layout .chat-conv-tab-badge { background: var(--ios-red); font-size: 12px; }
 .m-layout .chat-conv-list { overflow: hidden; border-radius: 10px; background: var(--ios-cell); }
 .m-layout .chat-conv-item { position: relative; gap: 12px; padding: 10px 16px; border: 0; }
 .m-layout .chat-conv-item + .chat-conv-item::before { position: absolute; top: 0; right: 0; left: 76px; border-top: 0.5px solid var(--ios-separator); content: ''; }

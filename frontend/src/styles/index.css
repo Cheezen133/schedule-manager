@@ -1825,6 +1825,53 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
   margin: 0;
 }
 
+/* 会话列表的「好友 / 群聊」页签：分段切换，红色数字是该分类里有未读的会话数 */
+.chat-conv-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  margin: 0.75rem 1rem 0.25rem;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--gray-100);
+}
+
+.chat-conv-tabs button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 30px;
+  padding: 0 0.5rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--gray-600);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.chat-conv-tabs button.active {
+  background: white;
+  color: var(--primary);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.chat-conv-tab-badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--danger);
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+}
+
 .chat-conv-list {
   flex: 1;
   overflow-y: auto;

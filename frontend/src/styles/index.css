@@ -423,6 +423,8 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
 
 /* 弹窗底部按钮行里的主按钮按内容宽度显示：.btn-primary 默认占满整行（适合登录页等单独的大按钮），放进按钮行会把「取消」挤成竖排 */
 .modal-actions .btn-primary { width: auto; }
+/* 按钮行里的按钮拉伸到同一行最高按钮的高度（按钮文字仍垂直居中）；只作用于按钮，行里的「上传中」进度文字仍保持居中 */
+.modal-actions > button { align-self: stretch; }
 
 .error-message {
   background: #fef2f2;

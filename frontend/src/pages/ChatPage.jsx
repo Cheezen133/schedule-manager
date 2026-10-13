@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import {
@@ -54,6 +54,75 @@ function ProtectedChatMedia({ filename, type, alt = '图片' }) {
   if (!url) return <div className="chat-media-loading">正在加载媒体…</div>
   if (type === 'video') return <video controls className="chat-msg-video" preload="metadata" src={url} />
   return <img src={url} alt={alt} className="chat-msg-image" onClick={() => window.open(url, '_blank', 'noopener')} />
+}
+
+// 消息菜单里的线条图标（24×24 画布，颜色跟随文字色）
+const STAR_POINTS = '12 3.5 14.6 8.8 20.4 9.6 16.2 13.7 17.2 19.5 12 16.8 6.8 19.5 7.8 13.7 3.6 9.6 9.4 8.8'
+const MSG_MENU_ICONS = {
+  copy: <><rect x="8.5" y="8.5" width="11" height="11" rx="2" /><path d="M15.5 8.5v-2a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2" /></>,
+  star: <polygon points={STAR_POINTS} />,
+  starFilled: <polygon points={STAR_POINTS} fill="currentColor" />,
+  calendar: <><rect x="3.5" y="5" width="17" height="15" rx="2" /><path d="M3.5 9.5h17M8 3v4M16 3v4M12 12.5v5M9.5 15h5" /></>,
+  download: <path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14" />,
+  folder: <path d="M3.5 7a2 2 0 0 1 2-2h4l2 2.5h7a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" />,
+  trash: <path d="M4.5 7h15M10 4h4M6.5 7l.9 12a2 2 0 0 0 2 1.8h5.2a2 2 0 0 0 2-1.8l.9-12M10 11v5.5M14 11v5.5" />,
+  recall: <><path d="M9 5.5 4.5 10 9 14.5" /><path d="M4.5 10h10a5 5 0 0 1 0 10H11" /></>,
+  announcement: <><path d="M4 10v4a1 1 0 0 0 1 1h2l6 4V5L7 9H5a1 1 0 0 0-1 1z" /><path d="M16.5 9a4 4 0 0 1 0 6M19 6.5a7.5 7.5 0 0 1 0 11" /></>,
+  todo: <><rect x="4" y="4" width="16" height="16" rx="3" /><path d="m8.5 12 2.5 2.5 4.5-5" /></>,
+}
+const MSG_MENU_COLUMNS = 5
+
+// 消息的长按 / 右键菜单：贴着被点的那条气泡弹出，样式参照微信的深色图标菜单，一行最多 5 个操作。
+// 位置：先试气泡上方，放不下再试下方；气泡太高、上下都放不下时，改为贴着按下的位置弹出。小三角始终指向气泡的水平中线。
+// anchor 是气泡在屏幕上的位置，point 是按下的位置，bounds 是消息区域的可见范围（菜单不越出这个范围）
+function MessageActionMenu({ anchor, point, bounds, actions }) {
+  const menuRef = useRef(null)
+  const [layout, setLayout] = useState(null)
+
+  // 先以不可见状态渲染、量出菜单尺寸，再在浏览器绘制之前算好位置，菜单不会先闪在别处
+  useLayoutEffect(() => {
+    const menu = menuRef.current
+    if (!menu) return
+    const width = menu.offsetWidth
+    const height = menu.offsetHeight
+    const gap = 9 // 菜单和气泡之间留给小三角的距离
+    const edge = 6 // 菜单离消息区域边缘至少留出的距离
+    const fitsAbove = y => y - gap - height >= bounds.top + edge
+    const fitsBelow = y => y + gap + height <= bounds.bottom - edge
+    let placement = 'above'
+    let top
+    if (fitsAbove(anchor.top)) top = anchor.top - gap - height
+    else if (fitsBelow(anchor.bottom)) { placement = 'below'; top = anchor.bottom + gap }
+    else if (fitsAbove(point.y)) top = point.y - gap - height
+    else { placement = 'below'; top = point.y + gap }
+    const centerX = (anchor.left + anchor.right) / 2
+    let left = Math.max(bounds.left + edge, Math.min(centerX - width / 2, bounds.right - edge - width))
+    // 兜底：消息区域比菜单还小时，至少让菜单完整留在窗口里
+    top = Math.max(edge, Math.min(top, window.innerHeight - edge - height))
+    left = Math.max(edge, Math.min(left, window.innerWidth - edge - width))
+    // 小三角不能伸到菜单的圆角外面
+    const arrowLeft = Math.max(14, Math.min(centerX - left, width - 14))
+    setLayout({ top, left, placement, arrowLeft })
+  }, [anchor, point, bounds, actions.length])
+
+  const rows = []
+  for (let i = 0; i < actions.length; i += MSG_MENU_COLUMNS) rows.push(actions.slice(i, i + MSG_MENU_COLUMNS))
+  return (
+    <div ref={menuRef} className={`msg-action-menu${layout ? ` is-${layout.placement}` : ''}`}
+      style={layout ? { top: layout.top, left: layout.left, '--arrow-left': `${layout.arrowLeft}px` } : { top: 0, left: 0, visibility: 'hidden' }}
+      onContextMenu={event => event.preventDefault()}>
+      {rows.map((row, index) => (
+        <div key={index} className="msg-action-row">
+          {row.map(action => (
+            <button key={action.key} type="button" className="msg-action-item" aria-label={action.label} title={action.title} onClick={action.onClick}>
+              <svg viewBox="0 0 24 24" aria-hidden="true">{MSG_MENU_ICONS[action.icon]}</svg>
+              <span>{action.label}</span>
+            </button>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 const FILE_TAGS = ['日常', '请求', '文件', '谈话', '查房', '约定']
@@ -330,6 +399,19 @@ export default function ChatPage() {
     document.addEventListener('click', close)
     document.addEventListener('keydown', close)
     return () => { document.removeEventListener('click', close); document.removeEventListener('keydown', close) }
+  }, [])
+  // 消息菜单贴着气泡定位：消息列表一滚动、窗口尺寸一变，位置就对不上了，直接收起
+  useEffect(() => {
+    if (!contextMenu) return
+    const list = msgListRef.current
+    const close = () => setContextMenu(null)
+    list?.addEventListener('scroll', close, { passive: true })
+    window.addEventListener('resize', close)
+    return () => { list?.removeEventListener('scroll', close); window.removeEventListener('resize', close) }
+  }, [contextMenu])
+  // 已收藏的消息：进入聊天页加载一次，消息菜单据此显示「收藏」还是「取消收藏」
+  useEffect(() => {
+    getFavorites().then(res => setFavIds(new Set((res.data || []).map(item => item.id)))).catch(() => {})
   }, [])
 
   const fetchConvs = useCallback(async () => {
@@ -807,7 +889,17 @@ export default function ChatPage() {
   const handleContextMenu = (e, msg) => {
     e.preventDefault()
     if (msg.is_recalled) return
-    setContextMenu({ x: e.clientX, y: e.clientY, msg })
+    // 菜单贴着这条消息的气泡弹出：记下此刻气泡和消息区域在屏幕上的位置
+    const bubble = msgListRef.current?.querySelector(`[data-msg-id="${msg.id}"] .chat-msg-bubble`)
+    if (!bubble) return
+    const rect = bubble.getBoundingClientRect()
+    const area = msgListRef.current.getBoundingClientRect()
+    setContextMenu({
+      msg,
+      point: { x: e.clientX, y: e.clientY },
+      anchor: { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right },
+      bounds: { top: Math.max(area.top, 0), bottom: Math.min(area.bottom, window.innerHeight), left: Math.max(area.left, 0), right: Math.min(area.right, window.innerWidth) },
+    })
   }
 
   const handleToggleFavorite = async (msg) => {
@@ -825,6 +917,28 @@ export default function ChatPage() {
     }
     downloadAuthorizedChatFile(contextMenu.msg.file_url.split('/').pop(), contextMenu.msg.file_name).catch(() => showToast('下载失败，请稍后重试'))
     setContextMenu(null)
+  }
+
+  // 复制整条文字消息。手机上长按不再触发系统选字，复制文字靠这一项
+  const copyMessageText = async () => {
+    const text = contextMenu?.msg?.content || ''
+    setContextMenu(null)
+    if (!text) return
+    let copied = true
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      // 降级方案：非 HTTPS 页面（如用局域网 IP 访问）没有剪贴板接口
+      const textarea = document.createElement('textarea')
+      textarea.value = text
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.select()
+      copied = document.execCommand('copy')
+      document.body.removeChild(textarea)
+    }
+    showToast(copied ? '已复制' : '复制失败')
   }
 
   const addTextToSchedule = () => {
@@ -872,7 +986,7 @@ export default function ChatPage() {
     try { const res = await searchChat(searchQuery); setSearchResults(res.data); setShowSearchPanel(true) } catch {}
   }
 
-  const favoriteFetch = async () => { setFavLoading(true); try { const res = await getFavorites(); setFavorites(res.data || []) } finally { setFavLoading(false); setShowFavPanel(true) } }
+  const favoriteFetch = async () => { setFavLoading(true); try { const res = await getFavorites(); const list = res.data || []; setFavorites(list); setFavIds(new Set(list.map(item => item.id))) } finally { setFavLoading(false); setShowFavPanel(true) } }
 
   const activeConv = convs.find((c) => c.id === activeId)
   // 按页签拆分会话列表（顺序保持接口返回的顺序）；页签上的数字是该分类里有未读的会话数
@@ -938,6 +1052,21 @@ export default function ChatPage() {
     if (message.sender_id === me?.id) return true
     return Boolean(activeConv?.partner?.is_group && groupCanManage)
   }
+  // 消息菜单里的操作：按消息类型、是不是自己发的、在群里的身份决定显示哪些
+  const menuMsg = contextMenu?.msg
+  const menuMsgFavorited = Boolean(menuMsg && favIds.has(menuMsg.id))
+  const messageMenuActions = menuMsg ? [
+    menuMsg.msg_type === 'text' && { key: 'copy', icon: 'copy', label: '复制', onClick: copyMessageText },
+    { key: 'favorite', icon: menuMsgFavorited ? 'starFilled' : 'star', label: menuMsgFavorited ? '取消收藏' : '收藏', onClick: () => handleToggleFavorite(menuMsg) },
+    menuMsg.msg_type === 'text'
+      ? { key: 'schedule', icon: 'calendar', label: '添加日程', title: '用这条消息新建日程', onClick: addTextToSchedule }
+      : { key: 'download', icon: 'download', label: '下载', onClick: handleDownload },
+    { key: 'shared', icon: 'folder', label: '共享文件', title: '添加到本会话的共享文件（需选标签）', onClick: triggerAddFromMsg },
+    menuMsg.sender_id === me?.id && { key: 'delete', icon: 'trash', label: '删除', onClick: () => { setContextMenu(null); handleDelete(menuMsg.id) } },
+    canRecallMessage(menuMsg) && { key: 'recall', icon: 'recall', label: '撤回', onClick: () => { setPendingRecallMessage(menuMsg); setContextMenu(null) } },
+    activeConv?.partner?.is_group && groupCanManage && { key: 'announcement', icon: 'announcement', label: '设为公告', onClick: () => createFromMessage('announcement') },
+    activeConv?.partner?.is_group && groupCanManage && { key: 'todo', icon: 'todo', label: '设为待办', onClick: () => createFromMessage('todo') },
+  ].filter(Boolean) : []
   const filteredContacts = showGroupModal
     ? contacts.filter((contact) => !searchTerm || (contact.nickname || '').includes(searchTerm) || (contact.username || '').includes(searchTerm))
     : contacts
@@ -1112,7 +1241,7 @@ export default function ChatPage() {
               const isLastMine = isMine && messages.filter(m => m.sender_id === me.id).slice(-1)[0]?.id === item.id
               const showRead = isLastMine && activeConv && activeConv.my_last_read
               return (
-                <div key={item.id} className={`chat-msg ${isMine ? 'mine' : 'theirs'}`} onContextMenu={(e) => handleContextMenu(e, item)} {...longPressProps(event => handleContextMenu(event, item))}>
+                <div key={item.id} data-msg-id={item.id} className={`chat-msg ${isMine ? 'mine' : 'theirs'}${menuMsg?.id === item.id ? ' is-menu-target' : ''}`} onContextMenu={(e) => handleContextMenu(e, item)} {...longPressProps(event => handleContextMenu(event, item))}>
                   {!isMine && <div className="chat-msg-avatar">{senderName.charAt(0)}</div>}
                   <div className="chat-msg-bubble">
                     <div className="chat-msg-sender">{senderName}</div>
@@ -1131,8 +1260,6 @@ export default function ChatPage() {
                     <div className="chat-msg-meta">
                       <span className="chat-msg-time">{formatTime(item.created_at)}</span>
                       {!item.is_recalled && showRead && <span className="chat-read-label">已读</span>}
-                      {!item.is_recalled && isMine && <button className="chat-msg-delete" onClick={() => handleDelete(item.id)} title="删除">🗑</button>}
-                      {!item.is_recalled && hasFile && isMine && <button className="chat-msg-delete" onClick={() => { downloadAuthorizedChatFile(item.file_url.split('/').pop(), item.file_name).catch(() => showToast('下载失败，请稍后重试')) }} title="下载" style={{ marginLeft: 2 }}>⬇</button>}
                     </div>
                   </div>
                   {isMine && <div className="chat-msg-avatar me">{senderName.charAt(0)}</div>}
@@ -1278,7 +1405,7 @@ export default function ChatPage() {
                     <div className="fav-item-info"><div className="fav-item-name">{f.file_name || f.content || '文件'}</div><div className="fav-item-detail">{f.partner?.display_name || '未知'} · {formatFileSize(f.file_size)} · {f.file_name ? getFileExt(f.file_name) : ''}</div></div>
                     <div className="fav-item-actions">
                       {f.file_url && <button onClick={() => downloadAuthorizedChatFile(f.file_url.split('/').pop(), f.file_name).catch(() => showToast('下载失败，请稍后重试'))} title="下载">⬇</button>}
-                      <button onClick={async () => { await removeFavorite(f.id); setFavorites((prev) => prev.filter((x) => x.id !== f.id)) }} title="取消收藏">✕</button>
+                      <button onClick={async () => { await removeFavorite(f.id); setFavorites((prev) => prev.filter((x) => x.id !== f.id)); setFavIds(prev => { const next = new Set(prev); next.delete(f.id); return next }) }} title="取消收藏">✕</button>
                     </div>
                   </div>
                 ))}
@@ -1333,21 +1460,8 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* 右键菜单 */}
-      {contextMenu && (
-        <div className="context-menu" style={{ top: contextMenu.y, left: contextMenu.x }}>
-          {canRecallMessage(contextMenu.msg) && <><div className="context-menu-item danger" onClick={() => { setPendingRecallMessage(contextMenu.msg); setContextMenu(null) }}>撤回消息</div><div className="context-menu-divider" /></>}
-          <div className="context-menu-item" onClick={() => handleToggleFavorite(contextMenu.msg)}>⭐ 收藏/取消收藏</div>
-          {contextMenu.msg.msg_type === 'text' ? (
-            <div className="context-menu-item" onClick={addTextToSchedule}>📅 添加到日程</div>
-          ) : (
-            <div className="context-menu-item" onClick={handleDownload}>⬇ 下载</div>
-          )}
-          <div className="context-menu-divider" />
-          <div className="context-menu-item" onClick={triggerAddFromMsg}>📁 添加到共享文件（需选标签）</div>
-          {activeConv?.partner?.is_group && groupCanManage && <><div className="context-menu-divider" /><div className="context-menu-item" onClick={() => createFromMessage('announcement')}>设为群公告</div><div className="context-menu-item" onClick={() => createFromMessage('todo')}>设为群待办</div></>}
-        </div>
-      )}
+      {/* 消息的长按 / 右键菜单 */}
+      {contextMenu && <MessageActionMenu key={contextMenu.msg.id} anchor={contextMenu.anchor} point={contextMenu.point} bounds={contextMenu.bounds} actions={messageMenuActions} />}
       {friendContext && <div className="context-menu" style={{ top: friendContext.y, left: friendContext.x }}><div className="context-menu-item" onClick={() => openTagAssign(friendContext.conversationId)}>设置标签</div>{!friendContext.isGroup && <><div className="context-menu-divider" /><div className="context-menu-item" onClick={() => requestScheduleManagement(friendContext.user)}>申请管理日程</div><div className="context-menu-divider" /><div className="context-menu-item danger" onClick={() => { setPendingFriendDelete(friendContext); setFriendContext(null) }}>删除好友</div></>}</div>}
       {groupRecordContext && <div className="context-menu" style={{ top: groupRecordContext.y, left: groupRecordContext.x }}><div className="context-menu-item danger" onClick={() => { setPendingGroupRecordDelete(groupRecordContext); setGroupRecordContext(null) }}>删除{groupRecordContext.type === 'announcement' ? '群公告' : '群待办'}</div></div>}
       {groupMemberContext && <div className="context-menu" style={{ top: groupMemberContext.y, left: groupMemberContext.x }}>

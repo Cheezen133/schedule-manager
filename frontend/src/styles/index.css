@@ -2216,24 +2216,6 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
   opacity: 0.6;
 }
 
-.chat-msg-delete {
-  background: none;
-  border: none;
-  font-size: 0.7rem;
-  cursor: pointer;
-  opacity: 0;
-  padding: 0;
-  transition: opacity 0.15s;
-}
-
-.chat-msg:hover .chat-msg-delete {
-  opacity: 0.6;
-}
-
-.chat-msg-delete:hover {
-  opacity: 1 !important;
-}
-
 .chat-read-label {
   font-size: 0.6rem;
   opacity: 0.5;
@@ -2363,6 +2345,56 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
 .context-menu-item.danger { color: var(--danger, #dc2626); }
 .context-menu-item.danger:hover { color: #b91c1c; background: #fef2f2; }
 .context-menu-divider { height: 1px; background: var(--gray-200); margin: 0.25rem 0; }
+
+/* 消息的长按 / 右键菜单：贴着气泡弹出的深色图标菜单（参照微信），位置由 ChatPage 里的 MessageActionMenu 计算 */
+.msg-action-menu {
+  position: fixed;
+  z-index: 500;
+  width: max-content;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: #4c4c4c;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.22);
+  animation: fadeIn 0.12s ease-out;
+}
+/* 指向气泡的小三角，水平位置由 --arrow-left 给出 */
+.msg-action-menu::after {
+  content: '';
+  position: absolute;
+  left: var(--arrow-left, 50%);
+  margin-left: -7px;
+  border: 7px solid transparent;
+}
+.msg-action-menu.is-above::after { top: 100%; border-top-color: #4c4c4c; }
+.msg-action-menu.is-below::after { bottom: 100%; border-bottom-color: #4c4c4c; }
+.msg-action-row { display: flex; }
+.msg-action-row + .msg-action-row { border-top: 1px solid rgba(255,255,255,0.12); }
+.msg-action-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  width: 58px;
+  min-height: 0;
+  padding: 10px 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.msg-action-item:hover:not(:disabled) { color: #fff; background: rgba(255,255,255,0.1); }
+.msg-action-item:active { background: rgba(255,255,255,0.18); }
+.msg-action-item svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+/* 菜单打开时，被操作的那条气泡稍微变暗 */
+.chat-msg.is-menu-target .chat-msg-bubble { filter: brightness(0.9); }
+/* 触屏上长按只弹出上面的菜单，不再触发系统自带的选字；复制文字用菜单里的「复制」 */
+@media (hover: none) {
+  .chat-msg-bubble { -webkit-user-select: none; user-select: none; }
+}
 
 /* 收藏面板 */
 .fav-item {

@@ -335,8 +335,6 @@ body:has(.m-layout) { background: var(--ios-bg); }
 .m-layout .chat-msg-list:not(.is-group) .chat-msg-sender { display: none; }
 .m-layout .chat-msg.theirs .chat-msg-sender { color: var(--ios-secondary); font-size: 12px; font-weight: 500; opacity: 1; }
 .m-layout .chat-msg-meta { margin-top: 2px; }
-/* 手机没有鼠标悬停：删除、下载按钮常显（网页端悬停才出现） */
-.m-layout .chat-msg-delete { min-height: 0; font-size: 12px; opacity: .6; }
 .m-layout .chat-msg-image,
 .m-layout .chat-msg-video { max-width: 100%; }
 .m-layout .chat-date-sep span { background: none; color: var(--ios-secondary); font-size: 12px; }

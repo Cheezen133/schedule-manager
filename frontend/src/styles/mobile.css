@@ -272,15 +272,7 @@ body:has(.m-layout) { background: var(--ios-bg); }
 .m-layout .m-action-sheet .m-action:active { background: rgba(0, 0, 0, 0.08); }
 .m-layout .m-action-sheet .m-action-cancel { border-radius: 14px; background: var(--ios-cell); font-weight: 600; }
 
-/* ----- 长按菜单：手机上固定在屏幕底部，样式同 iOS 操作菜单（原本弹在手指位置，靠近屏幕边缘会超出）----- */
-.m-layout .context-menu { top: auto !important; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom)); left: 8px !important; min-width: 0; padding: 0; overflow: hidden; border: 0; border-radius: 14px; background: var(--ios-material); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); animation: m-slide-up .25s cubic-bezier(.2, .8, .2, 1); }
-.m-layout .context-menu-item { display: flex; align-items: center; justify-content: center; min-height: 52px; padding: 0 16px; border-radius: 0; color: var(--ios-tint); font-size: 18px; }
-.m-layout .context-menu-item + .context-menu-item { border-top: 0.5px solid var(--ios-separator); }
-.m-layout .context-menu-item:hover { background: transparent; }
-.m-layout .context-menu-item:active { background: rgba(0, 0, 0, 0.08); }
-.m-layout .context-menu-item.danger { color: var(--ios-red); }
-.m-layout .context-menu-item.disabled { color: var(--ios-gray); }
-.m-layout .context-menu-divider { height: 6px; margin: 0; background: rgba(60, 60, 67, 0.12); }
+/* 长按菜单在手机和网页端共用一套样式（贴着元素弹出的深色图标菜单，见 index.css 的 .action-popover），位置会自动避开屏幕边缘 */
 
 /* ----- 弹窗：手机上改成从底部弹出的面板；确认框仍居中（同 iOS 提示框）。弹窗宽度写在行内样式里，需 !important ----- */
 .m-layout .modal-overlay:not(.ui-confirm-overlay) { align-items: flex-end; }
@@ -314,7 +306,8 @@ body:has(.m-layout) { background: var(--ios-bg); }
 .m-layout .chat-conv-list { overflow: hidden; border-radius: 10px; background: var(--ios-cell); }
 .m-layout .chat-conv-item { position: relative; gap: 12px; padding: 10px 16px; border: 0; }
 .m-layout .chat-conv-item + .chat-conv-item::before { position: absolute; top: 0; right: 0; left: 76px; border-top: 0.5px solid var(--ios-separator); content: ''; }
-.m-layout .chat-conv-item:active { background: var(--ios-cell-pressed); }
+.m-layout .chat-conv-item:active,
+.m-layout .chat-conv-list .chat-conv-item.is-menu-target { background: var(--ios-cell-pressed); }
 .m-layout .chat-conv-avatar { position: relative; width: 48px; height: 48px; background: linear-gradient(180deg, #a3a3ab, #85858d); font-size: 20px; }
 .m-layout .chat-conv-name { font-size: 17px; font-weight: 600; }
 .m-layout .chat-conv-preview { margin-top: 2px; color: var(--ios-secondary); font-size: 15px; }

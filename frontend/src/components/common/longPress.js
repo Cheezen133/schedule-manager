@@ -1,5 +1,5 @@
 // 在触摸设备上把长按转换为与桌面端右键一致的上下文操作。
-// 回调接收一个只包含上下文菜单所需字段的轻量事件对象。
+// 回调接收一个只包含上下文菜单所需字段的轻量事件对象：按下的位置，以及被长按的元素（菜单要贴着它弹出）。
 
 // 每个元素当前这次按压的状态（计时器、是否已触发长按）。状态按元素保存，而不是放在闭包里：
 // 长按一触发，页面就会重新渲染并换上新的事件处理函数，闭包里的状态随之丢失，
@@ -31,6 +31,7 @@ export function longPressProps(onLongPress, delay = 560) {
         onLongPress({
           clientX: Math.max(8, Math.min(touch.clientX, maxX)),
           clientY: Math.max(8, Math.min(touch.clientY, maxY)),
+          currentTarget: element,
           preventDefault: () => {},
           stopPropagation: () => {},
         })

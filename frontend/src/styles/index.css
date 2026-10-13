@@ -2327,32 +2327,9 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
 .chat-file-size { font-size: 0.7rem; opacity: 0.6; margin-top: 2px; }
 .chat-file-dl { font-size: 1rem; opacity: 0.5; }
 
-/* 右键菜单 */
-.context-menu {
-  position: fixed;
-  z-index: 500;
-  background: white;
-  border: 1px solid var(--gray-200);
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-  min-width: 160px;
-  padding: 0.25rem;
-  animation: fadeIn 0.1s ease-out;
-}
-.context-menu-item {
-  padding: 0.5rem 0.75rem;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.85rem;
-  transition: background 0.1s;
-}
-.context-menu-item:hover { background: var(--gray-50); }
-.context-menu-item.danger { color: var(--danger, #dc2626); }
-.context-menu-item.danger:hover { color: #b91c1c; background: #fef2f2; }
-.context-menu-divider { height: 1px; background: var(--gray-200); margin: 0.25rem 0; }
-
-/* 消息的长按 / 右键菜单：贴着气泡弹出的深色图标菜单（参照微信），位置由 ChatPage 里的 MessageActionMenu 计算 */
-.msg-action-menu {
+/* 长按 / 右键弹出的操作菜单（消息、会话、群成员、群公告和待办共用）：贴着元素弹出的深色图标菜单（参照微信），
+   位置由 ChatPage 里的 ActionPopover 计算 */
+.action-popover {
   position: fixed;
   z-index: 500;
   width: max-content;
@@ -2362,26 +2339,27 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
   box-shadow: 0 6px 20px rgba(0,0,0,0.22);
   animation: fadeIn 0.12s ease-out;
 }
-/* 指向气泡的小三角，水平位置由 --arrow-left 给出 */
-.msg-action-menu::after {
+/* 指向元素的小三角，水平位置由 --arrow-left 给出 */
+.action-popover::after {
   content: '';
   position: absolute;
   left: var(--arrow-left, 50%);
   margin-left: -7px;
   border: 7px solid transparent;
 }
-.msg-action-menu.is-above::after { top: 100%; border-top-color: #4c4c4c; }
-.msg-action-menu.is-below::after { bottom: 100%; border-bottom-color: #4c4c4c; }
-.msg-action-row { display: flex; }
-.msg-action-row + .msg-action-row { border-top: 1px solid rgba(255,255,255,0.12); }
-.msg-action-item {
+.action-popover.is-above::after { top: 100%; border-top-color: #4c4c4c; }
+.action-popover.is-below::after { bottom: 100%; border-bottom-color: #4c4c4c; }
+.action-popover-row { display: flex; }
+.action-popover-row + .action-popover-row { border-top: 1px solid rgba(255,255,255,0.12); }
+.action-popover-item {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 5px;
-  width: 58px;
+  /* 四个字以内的项都是 58px 宽，换行后上下对齐；字多的（如「申请管理日程」）按文字自动加宽 */
+  min-width: 58px;
   min-height: 0;
-  padding: 10px 0 8px;
+  padding: 10px 4px 8px;
   border: 0;
   border-radius: 6px;
   background: transparent;
@@ -2391,11 +2369,14 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
   line-height: 1.2;
   white-space: nowrap;
 }
-.msg-action-item:hover:not(:disabled) { color: #fff; background: rgba(255,255,255,0.1); }
-.msg-action-item:active { background: rgba(255,255,255,0.18); }
-.msg-action-item svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-/* 菜单打开时，被操作的那条气泡稍微变暗 */
+.action-popover-item:hover:not(:disabled) { color: #fff; background: rgba(255,255,255,0.1); }
+.action-popover-item:active:not(:disabled) { background: rgba(255,255,255,0.18); }
+.action-popover-item svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+/* 菜单打开时，被操作的那条气泡或那一行稍微变暗 */
 .chat-msg.is-menu-target .chat-msg-bubble { filter: brightness(0.9); }
+.chat-conv-list .chat-conv-item.is-menu-target,
+.group-member-list .group-member-row.is-menu-target,
+.group-record-list article.is-menu-target { background: var(--gray-100); }
 /* 触屏上长按只弹出上面的菜单，不再触发系统自带的选字；复制文字用菜单里的「复制」 */
 @media (hover: none) {
   .chat-msg-bubble { -webkit-user-select: none; user-select: none; }
@@ -2820,7 +2801,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
 
 /* ===== 移动端布局与长按上下文菜单 ===== */
 .chat-media-loading, .chat-media-error { display: grid; place-items: center; min-width: 150px; min-height: 92px; padding: .75rem; border: 1px dashed var(--gray-300); border-radius: 9px; color: var(--gray-500); background: var(--gray-50); font-size: .82rem; }.chat-media-error { color: var(--danger); border-color: #fecaca; background: #fff7f7; }.chat-msg, .patient-card, .group-member-row, .group-record-list article { -webkit-touch-callout: none; }
-.group-expand-button { justify-self: center; margin: .15rem 0; }.context-menu-item.disabled { color: var(--gray-400); cursor: default; pointer-events: none; }.group-member-row { cursor: pointer; }.group-member-row:hover { background: var(--gray-50); }
+.group-expand-button { justify-self: center; margin: .15rem 0; }.group-member-row { cursor: pointer; }.group-member-row:hover { background: var(--gray-50); }
 .info-message {
   margin-bottom: 1rem;
   padding: 0.75rem 1rem;

@@ -407,10 +407,12 @@ export default function ChatPage() {
     try {
       const res = await createGroup(groupName.trim(), groupMemberIds)
       setShowNewChat(false)
+      setShowGroupModal(false)
       setGroupName('')
       setGroupMemberIds([])
+      // 先刷新会话列表再选中新群：否则「当前会话不在列表里就取消选中」的检查会抢先把新群取消掉
+      await fetchConvs()
       setActiveId(res.data.id)
-      fetchConvs()
       fetchMessages(res.data.id)
       showToast('群聊创建成功')
     } catch (err) {
@@ -448,6 +450,9 @@ export default function ChatPage() {
       setShowGroupModal(true)
     } catch {}
   }
+
+  // 「＋」按当前页签行事：好友页签发起新聊天（添加好友），群聊页签直接创建群聊
+  const openAddForTab = () => (convTab === 'groups' ? openGroupModal() : openNewChat())
 
   const handleSendText = async () => {
     const trimmed = text.trim()
@@ -795,11 +800,11 @@ export default function ChatPage() {
   const groupCanManage = ['owner', 'admin'].includes(myGroupRole)
   const groupIsOwner = myGroupRole === 'owner'
 
-  // 手机端导航栏：聊天窗口显示对方名字，右上角「···」打开会话菜单；会话列表右上角「＋」发起新聊天
+  // 手机端导航栏：聊天窗口显示对方名字，右上角「···」打开会话菜单；会话列表右上角「＋」在好友页签发起新聊天、在群聊页签直接建群
   const inMobileThread = isMobile && Boolean(conversationId)
   useMobileNav(inMobileThread
     ? { title: activeConv?.partner.display_name, rightLabel: '···', onRight: () => setMobileMenuOpen(true) }
-    : { onAdd: openNewChat })
+    : { onAdd: openAddForTab, addLabel: convTab === 'groups' ? '创建群聊' : '发起新聊天' })
   // 手机端会话菜单：收纳网页端聊天顶栏里的全部操作（备注名、群管理、共享文件）
   const openSharedFiles = () => { fetchSharedFiles(activeId); setShowFilePanel(true) }
   const mobileMenuActions = !activeConv ? [] : activeConv.partner.is_group ? [
@@ -879,7 +884,7 @@ export default function ChatPage() {
             <button className="btn-cancel" onClick={() => fetchFriendReq(true)} style={{ padding: '0.375rem 0.5rem', fontSize: '0.8rem', position: 'relative' }} title="好友请求">
               👥{totalFriendReq > 0 && <span style={{ position: 'absolute', top: -4, right: -4, background: '#dc2626', color: 'white', fontSize: '0.6rem', minWidth: 16, height: 16, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{totalFriendReq}</span>}
             </button>
-            <button className="btn-submit" onClick={openNewChat} style={{ padding: '0.375rem 0.75rem', fontSize: '0.85rem' }}>+ 新聊天</button>
+            <button className="btn-submit" onClick={openAddForTab} style={{ padding: '0.375rem 0.75rem', fontSize: '0.85rem' }}>{convTab === 'groups' ? '+ 新群聊' : '+ 新聊天'}</button>
           </div>
         </div>
         <div className="chat-conv-tabs" role="tablist" aria-label="会话分类">

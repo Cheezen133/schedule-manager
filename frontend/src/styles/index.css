@@ -421,6 +421,9 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
   cursor: not-allowed;
 }
 
+/* 弹窗底部按钮行里的主按钮按内容宽度显示：.btn-primary 默认占满整行（适合登录页等单独的大按钮），放进按钮行会把「取消」挤成竖排 */
+.modal-actions .btn-primary { width: auto; }
+
 .error-message {
   background: #fef2f2;
   color: var(--danger);
